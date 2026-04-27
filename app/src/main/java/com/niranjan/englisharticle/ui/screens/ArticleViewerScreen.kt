@@ -228,13 +228,11 @@ private fun InteractiveParagraph(
         phraseColor = Color(0xFF7C6FE8)
     )
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val doubleTapTracker = remember { DoubleTapTracker() }
 
-    fun openMeaning(position: Offset) {
+    fun openMeaning(position: Offset, showSentence: Boolean) {
         val layoutResult = textLayoutResult ?: return
         val offset = layoutResult.getOffsetForPosition(position)
         val range = renderContent.ranges.firstOrNull { offset >= it.start && offset < it.end } ?: return
-        val showSentence = doubleTapTracker.isDoubleTap(range.lookupText)
 
         lookedUpWords.add(range.lookupText.lowercase())
         onWordTap(
@@ -254,7 +252,8 @@ private fun InteractiveParagraph(
             .padding(horizontal = 24.dp)
             .pointerInput(renderContent.ranges) {
                 detectTapGestures(
-                    onTap = { position -> openMeaning(position) }
+                    onTap = { position -> openMeaning(position, showSentence = false) },
+                    onLongPress = { position -> openMeaning(position, showSentence = true) }
                 )
             },
         style = if (isFirstBodyParagraph) {
@@ -339,24 +338,3 @@ private data class ArticleParagraph(
     val isHeading: Boolean
 )
 
-private class DoubleTapTracker {
-    private var lastWord: String = ""
-    private var lastTimeMs: Long = 0L
-
-    fun isDoubleTap(word: String): Boolean {
-        val now = System.currentTimeMillis()
-        val isDouble = lastWord == word && now - lastTimeMs < DOUBLE_TAP_TIMEOUT_MS
-        if (isDouble) {
-            lastWord = ""
-            lastTimeMs = 0L
-        } else {
-            lastWord = word
-            lastTimeMs = now
-        }
-        return isDouble
-    }
-
-    private companion object {
-        const val DOUBLE_TAP_TIMEOUT_MS = 400L
-    }
-}

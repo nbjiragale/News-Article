@@ -90,7 +90,43 @@ object ArticleFormatter {
         "x.com",
         "instagram",
         "linkedin",
-        "youtube"
+        "youtube",
+        "first published",
+        "last modified",
+        "min read",
+        "listen to this",
+        "audio available",
+        "text size",
+        "report a correction",
+        "report an error",
+        "get our newsletter",
+        "sign up for",
+        "more on this topic",
+        "see all",
+        "show more",
+        "story first appeared",
+        "all rights reserved",
+        "reproduction prohibited",
+        "file photo",
+        "photo:",
+        "image:",
+        "getty images",
+        "reuters photo",
+        "afp photo",
+        "ap photo",
+        "read the full story",
+        "full coverage",
+        "share your views",
+        "post your comment",
+        "view comments",
+        "switch to",
+        "switch edition",
+        "share via",
+        "daily digest",
+        "morning digest",
+        "evening digest",
+        "end of article",
+        "copyright"
     )
 
     private val unwantedShortLines = setOf(
@@ -114,8 +150,63 @@ object ArticleFormatter {
         "english",
         "read",
         "share",
-        "print"
+        "print",
+        "economy",
+        "politics",
+        "tech",
+        "science",
+        "health",
+        "education",
+        "environment",
+        "cricket",
+        "football",
+        "auto",
+        "culture",
+        "travel",
+        "food",
+        "fashion",
+        "astrology",
+        "weather",
+        "elections",
+        "podcast",
+        "gallery",
+        "quiz",
+        "poll",
+        "audio",
+        "watch",
+        "listen",
+        "topics",
+        "tags",
+        "submit",
+        "ians",
+        "pti",
+        "advertisement"
     )
+
+    fun postClean(text: String): String {
+        if (text.isBlank()) return text
+
+        val seenLines = mutableSetOf<String>()
+        return text
+            .decodeCommonHtmlEntities()
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .lines()
+            .map { it.trim() }
+            .filter { line ->
+                if (line.isBlank()) return@filter true
+                val lower = line.lowercase()
+                if (lower in unwantedShortLines) return@filter false
+                if (unwantedLinePhrases.any { phrase -> lower == phrase || lower.contains(phrase) }) return@filter false
+                if (line.containsUrl() && line.split(Regex("\\s+")).size <= 3) return@filter false
+                if (line.isMetadataOnly()) return@filter false
+                if (line.isMostlySymbols()) return@filter false
+                seenLines.add(lower)
+            }
+            .joinToString("\n")
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
+    }
 
     fun format(rawArticle: String): String {
         val seenLines = mutableSetOf<String>()
@@ -294,8 +385,14 @@ object ArticleFormatter {
         if (lowerLine.startsWith("source:")) return true
         if (lowerLine.startsWith("agency:")) return true
         if (lowerLine.startsWith("location:")) return true
+        if (lowerLine.startsWith("photo credit")) return true
+        if (lowerLine.startsWith("image credit")) return true
+        if (lowerLine.startsWith("credit:")) return true
+        if (lowerLine.startsWith("tags:")) return true
+        if (lowerLine.startsWith("topics:")) return true
         if (matches(Regex("^\\d+\\s+min\\s+read$", RegexOption.IGNORE_CASE))) return true
         if (matches(Regex("^[a-z ]+,\\s+[a-z]+\\s+\\d{1,2},\\s+\\d{4}.*$", RegexOption.IGNORE_CASE))) return true
+        if (matches(Regex("^\\d+\\s+(share|comment|like|view)s?$", RegexOption.IGNORE_CASE))) return true
 
         return false
     }

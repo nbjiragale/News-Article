@@ -124,6 +124,7 @@ fun EnglishLearningApp(
                     )
                 } else {
                     val isListening by textToSpeech.isArticleSpeaking
+                    val currentWordIndex by textToSpeech.currentWordIndex
                     ArticleViewerScreen(
                         article = currentArticle,
                         isSummarizing = uiState.isSummarizingArticle,
@@ -144,13 +145,11 @@ fun EnglishLearningApp(
                         onSpeakEnglish = textToSpeech::speakArticleEnglish,
                         onSpeakKannada = textToSpeech::speakKannada,
                         isListening = isListening,
-                        onToggleListen = {
-                            if (isListening) {
-                                textToSpeech.stop()
-                            } else {
-                                textToSpeech.speakArticleEnglish(currentArticle.cleanArticle)
-                            }
+                        currentWordIndex = currentWordIndex,
+                        onStartListening = { text, wordOffset ->
+                            textToSpeech.speakArticleEnglish(text, wordOffset)
                         },
+                        onStopListening = textToSpeech::stop,
                     )
                 }
             }

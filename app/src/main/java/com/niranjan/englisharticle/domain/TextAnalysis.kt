@@ -21,6 +21,30 @@ data class WordTokenGroup(
     fun cleanText(): String = tokens.joinToString(" ") { it.cleanWord() }.trim()
 }
 
+/**
+ * If [text] already contains paragraph breaks (`\n\n`), it is returned unchanged.
+ * Otherwise the text is split into sentences and grouped roughly every
+ * [sentencesPerParagraph] sentences, joined by a blank-line separator. This
+ * keeps the article readable when the upstream cleaner returns one giant blob.
+ */
+fun String.ensureParagraphs(sentencesPerParagraph: Int = 3): String {
+    val normalized = trim()
+    if (normalized.isEmpty()) return normalized
+    if (normalized.contains("\n\n")) return normalized
+
+    val singleLine = normalized.replace("\n", " ").replace(Regex("\\s+"), " ").trim()
+    val sentences = Regex("[^.!?]+[.!?]+[\")']*|[^.!?]+$")
+        .findAll(singleLine)
+        .map { it.value.trim() }
+        .filter { it.isNotEmpty() }
+        .toList()
+
+    if (sentences.size <= sentencesPerParagraph) return normalized
+
+    return sentences.chunked(sentencesPerParagraph)
+        .joinToString("\n\n") { it.joinToString(" ") }
+}
+
 fun String.toWordTokens(): List<WordToken> {
     var paragraphIndex = 0
     var lastEnd = 0

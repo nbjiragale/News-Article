@@ -22,8 +22,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,6 +32,7 @@ data class EnglishLearningUiState(
     val cleanedArticle: CleanArticleResult? = null,
     val isCleaningArticle: Boolean = false,
     val isSummarizingArticle: Boolean = false,
+    val summaryError: String? = null,
     val cleaningError: String? = null,
     val selected: SelectedWord? = null,
     val meaningState: MeaningUiState = MeaningUiState.Idle
@@ -63,6 +62,7 @@ class EnglishLearningViewModel(
 
     private var meaningLookupJob: Job? = null
     private var articleCleaningJob: Job? = null
+    private var summaryJob: Job? = null
 
     fun updateDraftArticle(article: String) {
         _uiState.update {
@@ -115,14 +115,80 @@ class EnglishLearningViewModel(
     fun openRecentArticle(article: RecentArticle) {
         articleCleaningJob?.cancel()
         meaningLookupJob?.cancel()
+        summaryJob?.cancel()
         _uiState.update {
             it.copy(
                 cleanedArticle = article.toCleanArticleResult(),
                 isCleaningArticle = false,
+                isSummarizingArticle = false,
+                summaryError = null,
                 selected = null,
                 meaningState = MeaningUiState.Idle
             )
         }
+    }
+
+    fun requestArticleContext() {
+        val current = uiState.value.cleanedArticle ?: return
+        if (current.cleanArticle.isBlank()) return
+        if (current.summary != null && current.summary.isNotBlank()) return
+        if (uiState.value.isSummarizingArticle) return
+
+        summaryJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isSummarizingArticle = true,
+                summaryError = null
+            )
+        }
+
+        summaryJob = viewModelScope.launch {
+            val summary = try {
+                articleService.summarizeArticle(current.cleanArticle).takeIf { it.isNotBlank() }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isSummarizingArticle = false,
+                        summaryError = error.message ?: "Could not generate context."
+                    )
+                }
+                return@launch
+            }
+
+            if (summary == null) {
+                _uiState.update {
+                    it.copy(
+                        isSummarizingArticle = false,
+                        summaryError = "The model returned an empty summary."
+                    )
+                }
+                return@launch
+            }
+
+            val updated = current.copy(summary = summary)
+            _uiState.update { state ->
+                if (state.cleanedArticle?.cleanArticle == current.cleanArticle) {
+                    state.copy(
+                        cleanedArticle = updated,
+                        isSummarizingArticle = false,
+                        summaryError = null
+                    )
+                } else {
+                    state.copy(
+                        isSummarizingArticle = false,
+                        summaryError = null
+                    )
+                }
+            }
+
+            runCatching { localStore.saveRecentArticle(updated) }
+        }
+    }
+
+    fun dismissSummaryError() {
+        _uiState.update { it.copy(summaryError = null) }
     }
 
     fun selectWord(tapped: SelectedWord) {
@@ -281,35 +347,26 @@ class EnglishLearningViewModel(
             }
             _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
 
-            _uiState.update { it.copy(isSummarizingArticle = true) }
-
-            val (detectedPhrases, summary) = coroutineScope {
-                val phrasesDeferred = async {
-                    runCatching {
-                        articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
-                    }.getOrDefault(emptyList())
-                }
-                val summaryDeferred = async {
-                    runCatching {
-                        articleService.summarizeArticle(displayResult.cleanArticle)
-                    }.getOrNull()?.takeIf { it.isNotBlank() }
-                }
-                phrasesDeferred.await() to summaryDeferred.await()
+            val detectedPhrases = try {
+                articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            val articleToSave = if (detectedPhrases.isEmpty()) {
+                displayResult
+            } else {
+                displayResult.copy(idiomaticPhrases = detectedPhrases)
             }
 
-            val articleToSave = displayResult.copy(
-                idiomaticPhrases = detectedPhrases.ifEmpty { displayResult.idiomaticPhrases },
-                summary = summary ?: displayResult.summary
-            )
-
-            _uiState.update { current ->
-                if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
-                    current.copy(
-                        cleanedArticle = articleToSave,
-                        isSummarizingArticle = false
-                    )
-                } else {
-                    current.copy(isSummarizingArticle = false)
+            if (detectedPhrases.isNotEmpty()) {
+                _uiState.update { current ->
+                    if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
+                        current.copy(cleanedArticle = articleToSave)
+                    } else {
+                        current
+                    }
                 }
             }
 

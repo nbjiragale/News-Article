@@ -67,6 +67,9 @@ class OpenRouterArticleService(
                 - Preserve original wording, paragraph order, and direct quotes exactly
                 - cleanArticle must contain the COMPLETE article body, not a shortened version
                 - Every sentence in cleanArticle must exist verbatim in the raw text
+                - Separate paragraphs in cleanArticle with a BLANK LINE (two newlines, "\n\n")
+                - If the raw text shows the body as one giant block, split it into natural paragraphs of 2-4 sentences each based on topic shifts and sentence flow
+                - Never return the article body as a single paragraph
 
                 Return valid JSON:
                 {

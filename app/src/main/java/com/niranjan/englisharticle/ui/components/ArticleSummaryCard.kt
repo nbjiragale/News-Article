@@ -9,9 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,71 +36,100 @@ import com.niranjan.englisharticle.domain.ArticleSummary
 fun ArticleSummaryCard(
     summary: ArticleSummary?,
     isLoading: Boolean,
+    errorMessage: String?,
+    onRequestContext: () -> Unit,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (summary == null && !isLoading) return
-
     Surface(
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.tertiary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_book_a),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onTertiary
-                    )
-                }
-                Text(
-                    text = "Article Context",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
+            SummaryHeader()
 
-            if (isLoading && summary == null) {
-                LoadingSummaryRows()
-            } else if (summary != null) {
-                SummarySection(
-                    label = "WHAT HAPPENED",
-                    english = summary.whatHappenedEnglish,
-                    kannada = summary.whatHappenedKannada,
+            when {
+                summary != null && summary.isNotBlank() -> SummaryContent(
+                    summary = summary,
                     onSpeakEnglish = onSpeakEnglish,
                     onSpeakKannada = onSpeakKannada
                 )
-                if (summary.gistEnglish.isNotBlank() || summary.gistKannada.isNotBlank()) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.18f)
-                    )
-                    SummarySection(
-                        label = "WHAT THIS ARTICLE IS ABOUT",
-                        english = summary.gistEnglish,
-                        kannada = summary.gistKannada,
-                        onSpeakEnglish = onSpeakEnglish,
-                        onSpeakKannada = onSpeakKannada
-                    )
-                }
+                isLoading -> LoadingPlaceholder()
+                else -> CallToAction(
+                    errorMessage = errorMessage,
+                    onRequestContext = onRequestContext
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun SummaryHeader() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.tertiaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_book_a),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "Article Context",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Quick understanding in English and Kannada",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryContent(
+    summary: ArticleSummary,
+    onSpeakEnglish: (String) -> Unit,
+    onSpeakKannada: (String) -> Unit
+) {
+    SummarySection(
+        label = "WHAT HAPPENED",
+        english = summary.whatHappenedEnglish,
+        kannada = summary.whatHappenedKannada,
+        onSpeakEnglish = onSpeakEnglish,
+        onSpeakKannada = onSpeakKannada
+    )
+    if (summary.gistEnglish.isNotBlank() || summary.gistKannada.isNotBlank()) {
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        )
+        SummarySection(
+            label = "WHAT THIS ARTICLE IS ABOUT",
+            english = summary.gistEnglish,
+            kannada = summary.gistKannada,
+            onSpeakEnglish = onSpeakEnglish,
+            onSpeakKannada = onSpeakKannada
+        )
     }
 }
 
@@ -113,7 +146,7 @@ private fun SummarySection(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.tertiary
         )
         if (english.isNotBlank()) {
             SummaryLine(
@@ -152,9 +185,9 @@ private fun SummaryLine(
                     MaterialTheme.typography.bodyLarge
                 },
                 color = if (emphasized) {
-                    MaterialTheme.colorScheme.onTertiaryContainer
+                    MaterialTheme.colorScheme.onSurface
                 } else {
-                    MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 }
             )
         }
@@ -166,37 +199,89 @@ private fun SummaryLine(
                 painter = painterResource(R.drawable.ic_volume_2),
                 contentDescription = "Read aloud",
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                tint = MaterialTheme.colorScheme.tertiary
             )
         }
     }
 }
 
 @Composable
-private fun LoadingSummaryRows() {
+private fun CallToAction(
+    errorMessage: String?,
+    onRequestContext: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "WHAT HAPPENED",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+            text = "Tap to generate a short two-line summary in simple English and Kannada.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (!errorMessage.isNullOrBlank()) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        Button(
+            onClick = onRequestContext,
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary
+            )
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_book_a),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = if (errorMessage.isNullOrBlank()) "Get article context" else "Try again",
+                modifier = Modifier.padding(start = 8.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadingPlaceholder() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(20.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.tertiary
+        )
+        Text(
+            text = "Generating summary…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SkeletonBlock(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(18.dp),
+                .height(16.dp),
             cornerRadius = 6
         )
         SkeletonBlock(
             modifier = Modifier
                 .fillMaxWidth(0.85f)
-                .height(18.dp),
+                .height(16.dp),
             cornerRadius = 6
         )
-        Text(
-            text = "Generating Kannada summary…",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+        Box(modifier = Modifier.height(4.dp).width(1.dp))
+        SkeletonBlock(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .height(16.dp),
+            cornerRadius = 6
         )
     }
 }

@@ -1,14 +1,11 @@
 package com.niranjan.englisharticle.ui.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,8 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -151,82 +146,6 @@ private fun RoundIconButton(
             modifier = Modifier.size(22.dp),
             tint = MaterialTheme.colorScheme.onSurface
         )
-    }
-}
-
-/**
- * Decorative hero image rendered with Compose Canvas — keeps the bundle small
- * and means we don't need real article photos. Uses brand colors so the hero
- * always reads as part of the app surface.
- */
-@Composable
-fun ArticleHeroImage() {
-    val skyTop = MaterialTheme.colorScheme.tertiaryContainer
-    val skyMid = MaterialTheme.colorScheme.secondaryContainer
-    val skyBottom = MaterialTheme.colorScheme.surface
-    val sun = MaterialTheme.colorScheme.tertiary
-    val buildingDark = MaterialTheme.colorScheme.primary
-    val buildingLight = MaterialTheme.colorScheme.secondary
-    val groundShadow = MaterialTheme.colorScheme.primary
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1.6f)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(skyTop, skyMid, skyBottom)
-                )
-            )
-            drawCircle(
-                color = sun.copy(alpha = 0.85f),
-                radius = size.minDimension * 0.14f,
-                center = Offset(size.width * 0.78f, size.height * 0.22f)
-            )
-
-            val baseY = size.height * 0.92f
-            val buildings = listOf(
-                Triple(0.05f, 0.58f, 0.17f),
-                Triple(0.20f, 0.36f, 0.16f),
-                Triple(0.36f, 0.48f, 0.20f),
-                Triple(0.58f, 0.30f, 0.15f),
-                Triple(0.72f, 0.44f, 0.20f)
-            )
-            buildings.forEachIndexed { index, (xFactor, topFactor, widthFactor) ->
-                val left = size.width * xFactor
-                val top = size.height * topFactor
-                val buildingWidth = size.width * widthFactor
-                val color = if (index % 2 == 0) buildingDark else buildingLight
-                drawRect(
-                    color = color.copy(alpha = 0.92f),
-                    topLeft = Offset(left, top),
-                    size = Size(buildingWidth, baseY - top)
-                )
-                val windowWidth = buildingWidth / 6f
-                val windowHeight = (baseY - top) / 10f
-                for (row in 1..6) {
-                    for (column in 1..3) {
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.42f),
-                            topLeft = Offset(
-                                left + column * windowWidth * 1.25f,
-                                top + row * windowHeight * 1.28f
-                            ),
-                            size = Size(windowWidth * 0.55f, windowHeight * 0.36f)
-                        )
-                    }
-                }
-            }
-            drawRect(
-                color = groundShadow.copy(alpha = 0.10f),
-                topLeft = Offset(0f, size.height * 0.88f),
-                size = Size(size.width, size.height * 0.12f)
-            )
-        }
     }
 }
 

@@ -46,12 +46,12 @@ import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.WordToken
 import com.niranjan.englisharticle.domain.WordTokenGroup
+import com.niranjan.englisharticle.domain.ensureParagraphs
 import com.niranjan.englisharticle.domain.findSentenceContaining
 import com.niranjan.englisharticle.domain.isLikelyHeading
 import com.niranjan.englisharticle.domain.toMeaningTokenGroups
 import com.niranjan.englisharticle.domain.toWordTokens
 import com.niranjan.englisharticle.ui.components.ArticleHeader
-import com.niranjan.englisharticle.ui.components.ArticleHeroImage
 import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.state.SelectedWord
@@ -60,16 +60,18 @@ import com.niranjan.englisharticle.ui.state.SelectedWord
 fun ArticleViewerScreen(
     article: CleanArticleResult,
     isSummarizing: Boolean,
+    summaryError: String?,
     onBackToInput: () -> Unit,
     onOpenRecents: () -> Unit,
     onOpenSavedWords: () -> Unit,
     onOpenPractice: () -> Unit,
     onWordTap: (SelectedWord) -> Unit,
+    onRequestContext: () -> Unit,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val articleBody = article.cleanArticle
+    val articleBody = remember(article.cleanArticle) { article.cleanArticle.ensureParagraphs() }
     val tokens = remember(articleBody) { articleBody.toWordTokens() }
     val paragraphs = remember(tokens) {
         tokens.groupBy { it.paragraphIndex }
@@ -143,11 +145,12 @@ fun ArticleViewerScreen(
                             .padding(horizontal = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        ArticleHeroImage()
                         ArticleHeader(article)
                         ArticleSummaryCard(
                             summary = article.summary,
                             isLoading = isSummarizing,
+                            errorMessage = summaryError,
+                            onRequestContext = onRequestContext,
                             onSpeakEnglish = onSpeakEnglish,
                             onSpeakKannada = onSpeakKannada
                         )

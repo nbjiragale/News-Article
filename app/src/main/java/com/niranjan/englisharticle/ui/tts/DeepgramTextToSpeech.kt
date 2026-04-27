@@ -12,6 +12,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -39,6 +41,7 @@ class DeepgramTextToSpeech(
     fun speak(
         text: String,
         onUnavailable: (String) -> Unit,
+        onWordIndex: (Int?) -> Unit = {},
         onComplete: () -> Unit = {}
     ) {
         val cleaned = text.trim()
@@ -53,9 +56,11 @@ class DeepgramTextToSpeech(
         activeJob = scope.launch {
             try {
                 val chunks = cleaned.chunkForTts(MAX_CHARS_PER_REQUEST)
+                val chunkPlans = buildChunkPlans(chunks)
+
                 val files = try {
                     coroutineScope {
-                        chunks.map { chunk -> async(Dispatchers.IO) { synthesizeChunk(chunk) } }.awaitAll()
+                        chunkPlans.map { plan -> async(Dispatchers.IO) { synthesizeChunk(plan.text) } }.awaitAll()
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
@@ -65,8 +70,9 @@ class DeepgramTextToSpeech(
                     return@launch
                 }
 
-                playSequentially(files)
+                playSequentially(files, chunkPlans, onWordIndex)
             } finally {
+                onWordIndex(null)
                 onComplete()
             }
         }
@@ -132,38 +138,67 @@ class DeepgramTextToSpeech(
         }
     }
 
-    private suspend fun playSequentially(files: List<File>) {
-        for (file in files) {
-            playFile(file)
+    private suspend fun playSequentially(
+        files: List<File>,
+        plans: List<ChunkPlan>,
+        onWordIndex: (Int?) -> Unit
+    ) {
+        for ((index, file) in files.withIndex()) {
+            val plan = plans[index]
+            playFile(file, plan, onWordIndex)
         }
     }
 
-    private suspend fun playFile(file: File) = withContext(Dispatchers.Main) {
+    private suspend fun playFile(
+        file: File,
+        plan: ChunkPlan,
+        onWordIndex: (Int?) -> Unit
+    ) = withContext(Dispatchers.Main) {
         val mediaPlayer = MediaPlayer()
         player = mediaPlayer
 
         try {
             mediaPlayer.setDataSource(file.absolutePath)
             mediaPlayer.prepare()
+            val durationMs = mediaPlayer.duration.coerceAtLeast(1)
+            val wordTimings = plan.wordTimingsForDuration(durationMs)
 
-            kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
-                mediaPlayer.setOnCompletionListener {
-                    if (continuation.isActive) continuation.resumeWith(Result.success(Unit))
-                }
-                mediaPlayer.setOnErrorListener { _, what, extra ->
-                    if (continuation.isActive) {
-                        continuation.resumeWith(
-                            Result.failure(DeepgramException("MediaPlayer error: what=$what extra=$extra"))
-                        )
+            val tracker = scope.launch {
+                var lastEmitted: Int = Int.MIN_VALUE
+                while (isActive) {
+                    val pos = runCatching { mediaPlayer.currentPosition }.getOrDefault(0)
+                    val relative = wordTimings.indexForPosition(pos)
+                    val global = if (relative >= 0) plan.firstGlobalWordIndex + relative else -1
+                    if (global != lastEmitted) {
+                        lastEmitted = global
+                        onWordIndex(if (global < 0) null else global)
                     }
-                    true
+                    delay(WORD_TICK_MS)
                 }
-                continuation.invokeOnCancellation {
-                    runCatching { mediaPlayer.stop() }
-                    runCatching { mediaPlayer.reset() }
-                    runCatching { mediaPlayer.release() }
+            }
+
+            try {
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
+                    mediaPlayer.setOnCompletionListener {
+                        if (continuation.isActive) continuation.resumeWith(Result.success(Unit))
+                    }
+                    mediaPlayer.setOnErrorListener { _, what, extra ->
+                        if (continuation.isActive) {
+                            continuation.resumeWith(
+                                Result.failure(DeepgramException("MediaPlayer error: what=$what extra=$extra"))
+                            )
+                        }
+                        true
+                    }
+                    continuation.invokeOnCancellation {
+                        runCatching { mediaPlayer.stop() }
+                        runCatching { mediaPlayer.reset() }
+                        runCatching { mediaPlayer.release() }
+                    }
+                    mediaPlayer.start()
                 }
-                mediaPlayer.start()
+            } finally {
+                tracker.cancel()
             }
         } finally {
             if (player === mediaPlayer) {
@@ -192,7 +227,62 @@ class DeepgramTextToSpeech(
         private const val MAX_CHARS_PER_REQUEST = 1800
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 60_000
+        private const val WORD_TICK_MS = 40L
     }
+}
+
+internal data class ChunkPlan(
+    val text: String,
+    /** Index in the global word list of the first word in this chunk. */
+    val firstGlobalWordIndex: Int,
+    /** Character length of each word in the chunk (in order). */
+    val wordCharLengths: IntArray
+) {
+    fun wordTimingsForDuration(durationMs: Int): WordTimings {
+        if (wordCharLengths.isEmpty()) return WordTimings(IntArray(0))
+        val totalChars = wordCharLengths.sum().coerceAtLeast(1)
+        val starts = IntArray(wordCharLengths.size)
+        var accumulated = 0
+        for (i in wordCharLengths.indices) {
+            starts[i] = (accumulated.toLong() * durationMs / totalChars).toInt()
+            accumulated += wordCharLengths[i]
+        }
+        return WordTimings(starts)
+    }
+}
+
+internal data class WordTimings(val startMs: IntArray) {
+    /**
+     * Returns the index of the word that should be highlighted at [positionMs],
+     * or -1 if before the first word.
+     */
+    fun indexForPosition(positionMs: Int): Int {
+        if (startMs.isEmpty()) return -1
+        if (positionMs < startMs[0]) return -1
+        var lo = 0
+        var hi = startMs.size - 1
+        while (lo < hi) {
+            val mid = (lo + hi + 1) ushr 1
+            if (startMs[mid] <= positionMs) lo = mid else hi = mid - 1
+        }
+        return lo
+    }
+}
+
+internal fun buildChunkPlans(chunks: List<String>): List<ChunkPlan> {
+    val plans = mutableListOf<ChunkPlan>()
+    var globalIndex = 0
+    for (chunk in chunks) {
+        val words = WORD_REGEX.findAll(chunk).map { it.value }.toList()
+        val lengths = IntArray(words.size) { words[it].length }
+        plans += ChunkPlan(
+            text = chunk,
+            firstGlobalWordIndex = globalIndex,
+            wordCharLengths = lengths
+        )
+        globalIndex += words.size
+    }
+    return plans
 }
 
 internal fun String.chunkForTts(maxChars: Int): List<String> {
@@ -239,3 +329,4 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
 }
 
 private val SENTENCE_SPLIT_REGEX = Regex("(?<=[.!?])\\s+")
+private val WORD_REGEX = Regex("\\S+")

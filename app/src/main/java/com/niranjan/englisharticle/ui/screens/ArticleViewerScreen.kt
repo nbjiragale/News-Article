@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,7 +73,9 @@ fun ArticleViewerScreen(
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit,
     isListening: Boolean,
-    onToggleListen: () -> Unit,
+    currentWordIndex: Int?,
+    onStartListening: (text: String, wordOffset: Int) -> Unit,
+    onStopListening: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val articleBody = remember(article.cleanArticle) { article.cleanArticle.ensureParagraphs() }
@@ -93,6 +97,14 @@ fun ArticleViewerScreen(
     val firstBodyParagraphIndex = remember(paragraphs) {
         paragraphs.indexOfFirst { !it.isHeading }
     }
+    val paragraphWordOffsets = remember(paragraphs) {
+        var sum = 0
+        paragraphs.map { paragraph ->
+            val start = sum
+            sum += paragraph.tokens.size
+            start
+        }
+    }
     val lookedUpWords = remember { mutableStateSetOf<String>() }
     val listState = rememberLazyListState()
     val readingProgress by remember {
@@ -110,6 +122,34 @@ fun ArticleViewerScreen(
         animationSpec = tween(durationMillis = 150),
         label = "reading_progress"
     )
+
+    LaunchedEffect(currentWordIndex, paragraphs) {
+        val wordIndex = currentWordIndex ?: return@LaunchedEffect
+        val paragraphIndex = paragraphWordOffsets.indexOfLast { it <= wordIndex }
+            .takeIf { it >= 0 } ?: return@LaunchedEffect
+        val targetLazyIndex = 1 + paragraphIndex
+        val isVisible = listState.layoutInfo.visibleItemsInfo.any { info ->
+            info.index == targetLazyIndex && info.offset >= 0 &&
+                info.offset + info.size <= listState.layoutInfo.viewportEndOffset
+        }
+        if (!isVisible) {
+            runCatching { listState.animateScrollToItem(targetLazyIndex) }
+        }
+    }
+
+    fun startFromCurrentScroll() {
+        if (paragraphs.isEmpty()) return
+        val firstVisibleItem = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.offset + it.size > 0 }
+        val firstVisibleLazyIndex = firstVisibleItem?.index ?: 0
+        val startParagraphIndex = (firstVisibleLazyIndex - 1).coerceIn(0, paragraphs.size - 1)
+        val firstBody = paragraphs.indexOfFirst { idx -> idx.paragraphIndex == startParagraphIndex }
+            .takeIf { it >= 0 } ?: 0
+        val text = paragraphs.subList(firstBody, paragraphs.size)
+            .joinToString("\n\n") { it.text }
+        val wordOffset = paragraphWordOffsets.getOrElse(firstBody) { 0 }
+        onStartListening(text, wordOffset)
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -149,10 +189,6 @@ fun ArticleViewerScreen(
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         ArticleHeader(article)
-                        ArticleListenButton(
-                            isListening = isListening,
-                            onToggle = onToggleListen
-                        )
                         ArticleSummaryCard(
                             summary = article.summary,
                             isLoading = isSummarizing,
@@ -176,6 +212,8 @@ fun ArticleViewerScreen(
                             article = article,
                             articleBody = articleBody,
                             isFirstBodyParagraph = paraIndex == firstBodyParagraphIndex,
+                            paragraphFirstWordIndex = paragraphWordOffsets.getOrElse(paraIndex) { 0 },
+                            currentWordIndex = currentWordIndex,
                             lookedUpWords = lookedUpWords,
                             onWordTap = onWordTap
                         )
@@ -197,6 +235,16 @@ fun ArticleViewerScreen(
                         )
                     )
                 )
+        )
+
+        ArticleListenButton(
+            isListening = isListening,
+            onToggle = {
+                if (isListening) onStopListening() else startFromCurrentScroll()
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 24.dp)
         )
     }
 }
@@ -233,6 +281,8 @@ private fun InteractiveParagraph(
     article: CleanArticleResult,
     articleBody: String,
     isFirstBodyParagraph: Boolean,
+    paragraphFirstWordIndex: Int,
+    currentWordIndex: Int?,
     lookedUpWords: MutableSet<String>,
     onWordTap: (SelectedWord) -> Unit
 ) {
@@ -240,13 +290,32 @@ private fun InteractiveParagraph(
     val tokenGroups = remember(paragraphTokens, article.idiomaticPhrases) {
         paragraphTokens.toMeaningTokenGroups(article.idiomaticPhrases)
     }
+    val groupTokenRanges = remember(tokenGroups) {
+        var index = 0
+        tokenGroups.map { group ->
+            val start = index
+            index += group.tokens.size
+            start until index
+        }
+    }
+    val highlightedGroupIndex = remember(currentWordIndex, paragraphFirstWordIndex, groupTokenRanges) {
+        val idx = currentWordIndex ?: return@remember -1
+        val relative = idx - paragraphFirstWordIndex
+        if (relative < 0) return@remember -1
+        groupTokenRanges.indexOfFirst { range -> relative in range }
+    }
     val lookedUpSnapshot = lookedUpWords.toSet()
+    val highlightBackground = MaterialTheme.colorScheme.primaryContainer
+    val highlightForeground = MaterialTheme.colorScheme.onPrimaryContainer
     val renderContent = buildParagraphRenderContent(
         tokenGroups = tokenGroups,
         lookedUpWords = lookedUpSnapshot,
         normalColor = MaterialTheme.colorScheme.onSurface,
         lookedUpColor = MaterialTheme.colorScheme.primary,
-        phraseColor = MaterialTheme.colorScheme.tertiary
+        phraseColor = MaterialTheme.colorScheme.tertiary,
+        highlightedGroupIndex = highlightedGroupIndex,
+        highlightBackground = highlightBackground,
+        highlightForeground = highlightForeground
     )
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
@@ -300,9 +369,21 @@ private fun buildParagraphRenderContent(
     lookedUpWords: Set<String>,
     normalColor: Color,
     lookedUpColor: Color,
-    phraseColor: Color
+    phraseColor: Color,
+    highlightedGroupIndex: Int,
+    highlightBackground: Color,
+    highlightForeground: Color
 ): ParagraphRenderContent {
-    return remember(tokenGroups, lookedUpWords, normalColor, lookedUpColor, phraseColor) {
+    return remember(
+        tokenGroups,
+        lookedUpWords,
+        normalColor,
+        lookedUpColor,
+        phraseColor,
+        highlightedGroupIndex,
+        highlightBackground,
+        highlightForeground
+    ) {
         val ranges = mutableListOf<InteractiveTextRange>()
         val text = buildAnnotatedString {
             tokenGroups.forEachIndexed { index, group ->
@@ -310,27 +391,28 @@ private fun buildParagraphRenderContent(
 
                 val lookupText = group.cleanText()
                 val start = length
-                val color = when {
+                val isHighlighted = index == highlightedGroupIndex
+                val baseColor = when {
                     group.isPhrase -> phraseColor
                     lookupText.lowercase() in lookedUpWords -> lookedUpColor
                     else -> normalColor
                 }
 
                 val isLookedUp = lookupText.lowercase() in lookedUpWords
-                withStyle(
-                    SpanStyle(
-                        color = color,
-                        textDecoration = when {
-                            group.isPhrase -> TextDecoration.Underline
-                            else -> TextDecoration.None
-                        },
-                        fontWeight = if (isLookedUp || group.isPhrase) {
-                            FontWeight.SemiBold
-                        } else {
-                            FontWeight.Normal
-                        }
-                    )
-                ) {
+                val style = SpanStyle(
+                    color = if (isHighlighted) highlightForeground else baseColor,
+                    background = if (isHighlighted) highlightBackground else Color.Unspecified,
+                    textDecoration = when {
+                        group.isPhrase -> TextDecoration.Underline
+                        else -> TextDecoration.None
+                    },
+                    fontWeight = when {
+                        isHighlighted -> FontWeight.SemiBold
+                        isLookedUp || group.isPhrase -> FontWeight.SemiBold
+                        else -> FontWeight.Normal
+                    }
+                )
+                withStyle(style) {
                     append(group.text)
                 }
 
@@ -369,3 +451,8 @@ private data class ArticleParagraph(
     val isHeading: Boolean
 )
 
+@Suppress("unused")
+private fun LazyListState.firstFullyVisibleParagraphIndex(): Int =
+    layoutInfo.visibleItemsInfo
+        .firstOrNull { it.offset >= 0 }
+        ?.index ?: 0

@@ -224,7 +224,7 @@ class OpenRouterArticleService(
             """.trimIndent()
 
             MeaningLookupMode.Sentence -> """
-                The user double-tapped the word to understand the whole sentence.
+                The user requested the meaning of the whole sentence containing this word.
                 Translate the ENTIRE tapped sentence into natural Kannada.
                 Do not translate only the tapped word.
                 Put the original full tapped sentence in exampleEnglish.

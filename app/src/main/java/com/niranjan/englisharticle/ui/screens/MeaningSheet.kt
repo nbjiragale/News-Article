@@ -50,6 +50,7 @@ fun MeaningSheet(
     showSentence: Boolean,
     state: MeaningUiState,
     isSaved: Boolean,
+    activeSpeechText: String?,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit,
     onSaveWord: (MeaningResult) -> Unit,
@@ -70,6 +71,7 @@ fun MeaningSheet(
                 ?.partOfSpeech
                 ?.ifBlank { if (showSentence) "Sentence context" else "Word" }
                 ?: if (showSentence) "Sentence context" else "",
+            isSpeaking = activeSpeechText == word.trim(),
             onSpeak = { onSpeakEnglish(word) }
         )
 
@@ -124,12 +126,14 @@ fun MeaningSheet(
                         sentence = sentence,
                         showSentence = true,
                         result = state.result,
+                        activeSpeechText = activeSpeechText,
                         onSpeakEnglish = onSpeakEnglish,
                         onSpeakKannada = onSpeakKannada
                     )
                     MeaningSummary(
                         result = state.result,
                         showSentence = true,
+                        activeSpeechText = activeSpeechText,
                         onSpeakEnglish = onSpeakEnglish,
                         onSpeakKannada = onSpeakKannada
                     )
@@ -137,6 +141,7 @@ fun MeaningSheet(
                     MeaningSummary(
                         result = state.result,
                         showSentence = false,
+                        activeSpeechText = activeSpeechText,
                         onSpeakEnglish = onSpeakEnglish,
                         onSpeakKannada = onSpeakKannada
                     )
@@ -145,6 +150,7 @@ fun MeaningSheet(
                         sentence = sentence,
                         showSentence = false,
                         result = state.result,
+                        activeSpeechText = activeSpeechText,
                         onSpeakEnglish = onSpeakEnglish,
                         onSpeakKannada = onSpeakKannada
                     )
@@ -199,6 +205,7 @@ private fun LookupModeToggle(
 private fun MeaningSheetHeader(
     word: String,
     partOfSpeech: String,
+    isSpeaking: Boolean,
     onSpeak: () -> Unit
 ) {
     Row(
@@ -239,8 +246,10 @@ private fun MeaningSheetHeader(
                 .background(MaterialTheme.colorScheme.primaryContainer)
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_volume_2),
-                contentDescription = "Pronounce word",
+                painter = painterResource(
+                    if (isSpeaking) R.drawable.ic_stop_square else R.drawable.ic_volume_2
+                ),
+                contentDescription = if (isSpeaking) "Stop pronunciation" else "Pronounce word",
                 modifier = Modifier.size(22.dp),
                 tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -252,6 +261,7 @@ private fun MeaningSheetHeader(
 private fun MeaningSummary(
     result: MeaningResult,
     showSentence: Boolean,
+    activeSpeechText: String?,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit
 ) {
@@ -263,14 +273,16 @@ private fun MeaningSummary(
             label = if (showSentence) "Tapped Word Meaning" else "Kannada Meaning",
             value = result.meaningKannada,
             emphasize = true,
+            activeSpeechText = activeSpeechText,
             onSpeak = { onSpeakKannada(result.meaningKannada) }
         )
+        val definition = result.simpleEnglish.ifBlank { result.explanationKannada }
         MeaningInfoCard(
             label = "Definition",
-            value = result.simpleEnglish.ifBlank { result.explanationKannada },
+            value = definition,
+            activeSpeechText = activeSpeechText,
             onSpeak = {
-                val text = result.simpleEnglish.ifBlank { result.explanationKannada }
-                if (result.simpleEnglish.isNotBlank()) onSpeakEnglish(text) else onSpeakKannada(text)
+                if (result.simpleEnglish.isNotBlank()) onSpeakEnglish(definition) else onSpeakKannada(definition)
             }
         )
     }
@@ -281,6 +293,7 @@ private fun MeaningInfoCard(
     label: String,
     value: String,
     emphasize: Boolean = false,
+    activeSpeechText: String? = null,
     onSpeak: (() -> Unit)? = null
 ) {
     if (value.isBlank()) return
@@ -310,6 +323,7 @@ private fun MeaningInfoCard(
                 if (onSpeak != null) {
                     SmallSpeakButton(
                         contentDescription = "Read $label",
+                        isSpeaking = activeSpeechText == value.trim(),
                         onClick = onSpeak
                     )
                 }
@@ -331,6 +345,7 @@ private fun MeaningContextCard(
     sentence: String,
     showSentence: Boolean,
     result: MeaningResult,
+    activeSpeechText: String?,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit
 ) {
@@ -370,6 +385,7 @@ private fun MeaningContextCard(
                 if (englishContext.isNotBlank()) {
                     SmallSpeakButton(
                         contentDescription = "Read English context",
+                        isSpeaking = activeSpeechText == englishContext.trim(),
                         onClick = { onSpeakEnglish(englishContext) }
                     )
                 }
@@ -408,6 +424,7 @@ private fun MeaningContextCard(
                     }
                     SmallSpeakButton(
                         contentDescription = "Read Kannada context",
+                        isSpeaking = activeSpeechText == kannadaContext.trim(),
                         onClick = { onSpeakKannada(kannadaContext) }
                     )
                 }
@@ -419,6 +436,7 @@ private fun MeaningContextCard(
 @Composable
 private fun SmallSpeakButton(
     contentDescription: String,
+    isSpeaking: Boolean,
     onClick: () -> Unit
 ) {
     IconButton(
@@ -426,10 +444,12 @@ private fun SmallSpeakButton(
         modifier = Modifier.size(32.dp)
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_volume_2),
-            contentDescription = contentDescription,
+            painter = painterResource(
+                if (isSpeaking) R.drawable.ic_stop_square else R.drawable.ic_volume_2
+            ),
+            contentDescription = if (isSpeaking) "Stop reading" else contentDescription,
             modifier = Modifier.size(18.dp),
-            tint = MaterialTheme.colorScheme.primary
+            tint = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
         )
     }
 }

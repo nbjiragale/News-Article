@@ -17,22 +17,28 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.R
+import com.niranjan.englisharticle.ui.tts.ArticlePlaybackState
 
 @Composable
 fun ArticleListenButton(
-    isListening: Boolean,
+    state: ArticlePlaybackState,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val containerColor = if (isListening) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.primaryContainer
+    val (iconRes, label) = when (state) {
+        ArticlePlaybackState.Idle -> R.drawable.ic_volume_2 to "Listen to article"
+        ArticlePlaybackState.Playing -> R.drawable.ic_pause to "Pause"
+        ArticlePlaybackState.Paused -> R.drawable.ic_play to "Resume"
     }
-    val contentColor = if (isListening) {
-        MaterialTheme.colorScheme.onErrorContainer
-    } else {
-        MaterialTheme.colorScheme.onPrimaryContainer
+    val containerColor = when (state) {
+        ArticlePlaybackState.Idle -> MaterialTheme.colorScheme.primaryContainer
+        ArticlePlaybackState.Playing -> MaterialTheme.colorScheme.tertiaryContainer
+        ArticlePlaybackState.Paused -> MaterialTheme.colorScheme.primaryContainer
+    }
+    val contentColor = when (state) {
+        ArticlePlaybackState.Idle -> MaterialTheme.colorScheme.onPrimaryContainer
+        ArticlePlaybackState.Playing -> MaterialTheme.colorScheme.onTertiaryContainer
+        ArticlePlaybackState.Paused -> MaterialTheme.colorScheme.onPrimaryContainer
     }
 
     Button(
@@ -50,14 +56,12 @@ fun ArticleListenButton(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
-                painter = painterResource(
-                    if (isListening) R.drawable.ic_stop_circle else R.drawable.ic_volume_2
-                ),
+                painter = painterResource(iconRes),
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
             Text(
-                text = if (isListening) "Stop reading" else "Listen to article",
+                text = label,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )

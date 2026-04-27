@@ -8,6 +8,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -123,7 +124,7 @@ fun EnglishLearningApp(
                         onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) }
                     )
                 } else {
-                    val isListening by textToSpeech.isArticleSpeaking
+                    val playbackState by textToSpeech.playbackState
                     val currentWordIndex by textToSpeech.currentWordIndex
                     ArticleViewerScreen(
                         article = currentArticle,
@@ -144,12 +145,13 @@ fun EnglishLearningApp(
                         onRequestContext = viewModel::requestArticleContext,
                         onSpeakEnglish = textToSpeech::speakArticleEnglish,
                         onSpeakKannada = textToSpeech::speakKannada,
-                        isListening = isListening,
+                        playbackState = playbackState,
                         currentWordIndex = currentWordIndex,
                         onStartListening = { text, wordOffset ->
                             textToSpeech.speakArticleEnglish(text, wordOffset)
                         },
-                        onStopListening = textToSpeech::stop,
+                        onPauseListening = textToSpeech::pauseArticle,
+                        onResumeListening = textToSpeech::resumeArticle,
                     )
                 }
             }
@@ -197,8 +199,15 @@ fun EnglishLearningApp(
         )
         val selectedIsSaved = savedWords.any { it.savedKey == selectedSavedKey }
 
+        val activeSpeechText by textToSpeech.currentShortSpeechText
+        DisposableEffect(selectedWord.word, selectedWord.sentence, selectedWord.lookupMode) {
+            onDispose { textToSpeech.stopShortSpeech() }
+        }
         ModalBottomSheet(
-            onDismissRequest = viewModel::dismissMeaning,
+            onDismissRequest = {
+                textToSpeech.stopShortSpeech()
+                viewModel.dismissMeaning()
+            },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
@@ -211,10 +220,12 @@ fun EnglishLearningApp(
                 showSentence = selectedWord.showSentence,
                 state = uiState.meaningState,
                 isSaved = selectedIsSaved,
-                onSpeakEnglish = textToSpeech::speakEnglish,
-                onSpeakKannada = textToSpeech::speakKannada,
+                activeSpeechText = activeSpeechText,
+                onSpeakEnglish = textToSpeech::toggleEnglish,
+                onSpeakKannada = textToSpeech::toggleKannada,
                 onSaveWord = viewModel::saveSelectedWord,
                 onPractice = { result ->
+                    textToSpeech.stopShortSpeech()
                     viewModel.saveSelectedWord(result)
                     viewModel.dismissMeaning()
                     navController.navigateSingleTop(AppRoute.Practice)

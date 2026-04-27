@@ -1,6 +1,7 @@
 package com.niranjan.englisharticle.data
 
 import com.niranjan.englisharticle.domain.ArticleAiService
+import com.niranjan.englisharticle.domain.ArticleFormatter
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
@@ -20,28 +21,53 @@ class OpenRouterArticleService(
 ) : ArticleAiService {
     override suspend fun cleanArticle(rawText: String): CleanArticleResult {
         val content = sendJsonChatRequest(
-            systemMessage = "You are an exact article extraction engine. Return only valid JSON.",
+            systemMessage = """
+                You are a precise article extraction engine.
+                Your ONLY job is to extract the main article body from raw pasted website text.
+                You MUST aggressively strip ALL non-article content.
+                Return only valid JSON.
+            """.trimIndent(),
             userMessage = """
-                You are an exact article extraction engine.
+                Extract the main news article from the raw text below.
 
-                The user pasted raw text copied from a news website. It contains article text plus website noise.
+                KEEP only:
+                - The article headline (put in "title")
+                - The article subtitle or deck (put in "subtitle")
+                - Author name (put in "author")
+                - Publication date (put in "publishedDate")
+                - The complete article body paragraphs (put in "cleanArticle")
 
-                Your task:
-                Extract the actual article using ONLY exact words from the pasted text.
+                REMOVE everything that is NOT part of the article body. This includes:
+                - Navigation menus, breadcrumbs, section/category labels (Home, News, India, Sports, etc.)
+                - Login, Sign in, Sign up, Register, Subscribe, Paywall prompts
+                - Cookie consent banners, Privacy policy, Terms of use
+                - Advertisement labels, Sponsored content markers, "Story continues below advertisement"
+                - "Read more", "Also read", "Related stories", "Recommended for you", "More from" sections
+                - Entire blocks of related article titles or teasers
+                - Social media buttons, share counts, "Share on", "Follow us", Tweet, WhatsApp, Telegram links
+                - Newsletter signup prompts, "Get our newsletter", "Sign up for alerts"
+                - App download prompts ("Download app", "Open in app", Google Play, App Store)
+                - Photo/image credits (Getty, Reuters, AFP, AP, PTI, File Photo, etc.) unless inline in a sentence
+                - Standalone image captions that repeat the article text or describe photos
+                - Comments section, reader comments, "Post a comment", "View comments"
+                - Footer content (About us, Contact, Careers, Copyright, All rights reserved)
+                - Metadata lines: "X min read", "Published:", "Updated:", "Last Modified:", timestamps
+                - "Written by", "Reported by", "Edited by", "With inputs from" lines (put author in "author" field instead)
+                - Video/audio player labels, "Watch", "Listen to this article"
+                - Tags, topic labels, category badges
+                - Any standalone URL or web address
+                - Duplicate or repeated paragraphs
+                - Breaking news tickers, live blog headers
+                - "First Published", "Source:", agency tags on their own line
 
-                Strict rules:
-                - Do NOT summarize
-                - Do NOT rewrite
-                - Do NOT paraphrase
-                - Do NOT shorten paragraphs
-                - Do NOT translate
-                - Do NOT add new words
-                - Preserve original wording exactly
-                - Preserve paragraph order
-                - Preserve direct quotes exactly
-                - Remove only website noise such as navigation, sign in, subscribe, footer, copyright, tags, repeated image captions, follow us, ads, social links
+                Strict extraction rules:
+                - Do NOT summarize, rewrite, paraphrase, shorten, or translate
+                - Do NOT add any words not present in the original
+                - Preserve original wording, paragraph order, and direct quotes exactly
+                - cleanArticle must contain the COMPLETE article body, not a shortened version
+                - Every sentence in cleanArticle must exist verbatim in the raw text
 
-                Return valid JSON only:
+                Return valid JSON:
                 {
                   "title": "",
                   "subtitle": "",
@@ -50,15 +76,14 @@ class OpenRouterArticleService(
                   "cleanArticle": ""
                 }
 
-                Every sentence in cleanArticle must already exist in the pasted raw text.
-                If the pasted text contains the full article, cleanArticle must contain the full extracted article, not a short version.
-
-                Raw pasted article:
+                Raw pasted text:
                 $rawText
             """.trimIndent()
         )
 
-        return CleanArticleResult.fromJson(JSONObject(content))
+        val result = CleanArticleResult.fromJson(JSONObject(content))
+        val postCleaned = ArticleFormatter.postClean(result.cleanArticle)
+        return result.copy(cleanArticle = postCleaned)
     }
 
     override suspend fun extractIdiomaticPhrases(articleText: String): List<String> {

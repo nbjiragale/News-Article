@@ -35,8 +35,35 @@ class DeepgramTextToSpeech(
     private var activeJob: Job? = null
     private var player: MediaPlayer? = null
 
+    @Volatile
+    private var paused: Boolean = false
+
     val isConfigured: Boolean
         get() = apiKey.isNotBlank()
+
+    val isPaused: Boolean
+        get() = paused && player != null
+
+    val isActive: Boolean
+        get() = activeJob?.isActive == true
+
+    fun pause() {
+        paused = true
+        player?.let { mp ->
+            runCatching {
+                if (mp.isPlaying) mp.pause()
+            }
+        }
+    }
+
+    fun resume() {
+        paused = false
+        player?.let { mp ->
+            runCatching {
+                if (!mp.isPlaying) mp.start()
+            }
+        }
+    }
 
     fun speak(
         text: String,
@@ -81,6 +108,7 @@ class DeepgramTextToSpeech(
     fun stop() {
         activeJob?.cancel()
         activeJob = null
+        paused = false
         player?.let { existing ->
             runCatching { existing.stop() }
             runCatching { existing.reset() }
@@ -196,6 +224,9 @@ class DeepgramTextToSpeech(
                         runCatching { mediaPlayer.release() }
                     }
                     mediaPlayer.start()
+                    if (paused) {
+                        runCatching { mediaPlayer.pause() }
+                    }
                 }
             } finally {
                 tracker.cancel()

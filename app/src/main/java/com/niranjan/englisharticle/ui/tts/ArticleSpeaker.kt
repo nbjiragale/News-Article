@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.niranjan.englisharticle.BuildConfig
+
+enum class ArticlePlaybackState { Idle, Playing, Paused }
 
 class ArticleSpeaker(
     context: Context,
@@ -21,18 +24,49 @@ class ArticleSpeaker(
         voice = deepgramVoice
     )
 
-    private val _isArticleSpeaking = mutableStateOf(false)
-    val isArticleSpeaking: State<Boolean> = _isArticleSpeaking
+    private val _playbackState = mutableStateOf(ArticlePlaybackState.Idle)
+    val playbackState: State<ArticlePlaybackState> = _playbackState
+
+    val isArticleSpeaking: State<Boolean> = derivedStateOf {
+        _playbackState.value != ArticlePlaybackState.Idle
+    }
 
     private val _currentWordIndex = mutableStateOf<Int?>(null)
     val currentWordIndex: State<Int?> = _currentWordIndex
 
+    /**
+     * Text currently being spoken via the short-speech (Android TTS) path. UI buttons can
+     * compare their own text to this to render a stop affordance for the active utterance.
+     */
+    val currentShortSpeechText: State<String?> = systemTts.currentSpeechText
+
     /** Short English snippets (single words, phrases, sentence lookups). Always uses Android TTS. */
     fun speakEnglish(text: String) {
         deepgram.stop()
-        _isArticleSpeaking.value = false
+        _playbackState.value = ArticlePlaybackState.Idle
         _currentWordIndex.value = null
         systemTts.speakEnglish(text)
+    }
+
+    fun toggleEnglish(text: String) {
+        if (currentShortSpeechText.value == text.trim()) {
+            stopShortSpeech()
+        } else {
+            speakEnglish(text)
+        }
+    }
+
+    fun toggleKannada(text: String) {
+        if (currentShortSpeechText.value == text.trim()) {
+            stopShortSpeech()
+        } else {
+            speakKannada(text)
+        }
+    }
+
+    /** Stops only the short-speech (Android TTS) path; leaves any article playback alone. */
+    fun stopShortSpeech() {
+        systemTts.stop()
     }
 
     /**
@@ -46,12 +80,12 @@ class ArticleSpeaker(
         systemTts.stop()
 
         if (deepgram.isConfigured) {
-            _isArticleSpeaking.value = true
+            _playbackState.value = ArticlePlaybackState.Playing
             _currentWordIndex.value = null
             deepgram.speak(
                 text = text,
                 onUnavailable = { fallbackText ->
-                    _isArticleSpeaking.value = false
+                    _playbackState.value = ArticlePlaybackState.Idle
                     _currentWordIndex.value = null
                     systemTts.speakEnglish(fallbackText)
                 },
@@ -59,7 +93,7 @@ class ArticleSpeaker(
                     _currentWordIndex.value = relative?.let { it + globalWordOffset }
                 },
                 onComplete = {
-                    _isArticleSpeaking.value = false
+                    _playbackState.value = ArticlePlaybackState.Idle
                     _currentWordIndex.value = null
                 }
             )
@@ -68,9 +102,21 @@ class ArticleSpeaker(
         }
     }
 
+    fun pauseArticle() {
+        if (_playbackState.value != ArticlePlaybackState.Playing) return
+        deepgram.pause()
+        _playbackState.value = ArticlePlaybackState.Paused
+    }
+
+    fun resumeArticle() {
+        if (_playbackState.value != ArticlePlaybackState.Paused) return
+        deepgram.resume()
+        _playbackState.value = ArticlePlaybackState.Playing
+    }
+
     fun speakKannada(text: String) {
         deepgram.stop()
-        _isArticleSpeaking.value = false
+        _playbackState.value = ArticlePlaybackState.Idle
         _currentWordIndex.value = null
         systemTts.speakKannada(text)
     }
@@ -78,14 +124,14 @@ class ArticleSpeaker(
     fun stop() {
         deepgram.stop()
         systemTts.stop()
-        _isArticleSpeaking.value = false
+        _playbackState.value = ArticlePlaybackState.Idle
         _currentWordIndex.value = null
     }
 
     fun shutdown() {
         deepgram.shutdown()
         systemTts.shutdown()
-        _isArticleSpeaking.value = false
+        _playbackState.value = ArticlePlaybackState.Idle
         _currentWordIndex.value = null
     }
 }

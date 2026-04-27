@@ -58,6 +58,7 @@ import com.niranjan.englisharticle.ui.components.ArticleListenButton
 import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.state.SelectedWord
+import com.niranjan.englisharticle.ui.tts.ArticlePlaybackState
 
 @Composable
 fun ArticleViewerScreen(
@@ -72,10 +73,11 @@ fun ArticleViewerScreen(
     onRequestContext: () -> Unit,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit,
-    isListening: Boolean,
+    playbackState: ArticlePlaybackState,
     currentWordIndex: Int?,
     onStartListening: (text: String, wordOffset: Int) -> Unit,
-    onStopListening: () -> Unit,
+    onPauseListening: () -> Unit,
+    onResumeListening: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val articleBody = remember(article.cleanArticle) { article.cleanArticle.ensureParagraphs() }
@@ -238,9 +240,13 @@ fun ArticleViewerScreen(
         )
 
         ArticleListenButton(
-            isListening = isListening,
+            state = playbackState,
             onToggle = {
-                if (isListening) onStopListening() else startFromCurrentScroll()
+                when (playbackState) {
+                    ArticlePlaybackState.Idle -> startFromCurrentScroll()
+                    ArticlePlaybackState.Playing -> onPauseListening()
+                    ArticlePlaybackState.Paused -> onResumeListening()
+                }
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)

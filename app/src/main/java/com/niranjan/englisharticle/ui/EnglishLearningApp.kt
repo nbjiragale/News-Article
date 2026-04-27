@@ -125,6 +125,7 @@ fun EnglishLearningApp(
                 } else {
                     ArticleViewerScreen(
                         article = currentArticle,
+                        isSummarizing = uiState.isSummarizingArticle,
                         onBackToInput = {
                             viewModel.clearCurrentArticle()
                             navController.navigate(AppRoute.Input) {
@@ -136,6 +137,8 @@ fun EnglishLearningApp(
                         onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
                         onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
                         onWordTap = viewModel::selectWord,
+                        onSpeakEnglish = textToSpeech::speakEnglish,
+                        onSpeakKannada = textToSpeech::speakKannada,
                     )
                 }
             }

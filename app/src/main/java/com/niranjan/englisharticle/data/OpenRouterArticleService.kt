@@ -2,6 +2,7 @@ package com.niranjan.englisharticle.data
 
 import com.niranjan.englisharticle.domain.ArticleAiService
 import com.niranjan.englisharticle.domain.ArticleFormatter
+import com.niranjan.englisharticle.domain.ArticleSummary
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
@@ -132,6 +133,53 @@ class OpenRouterArticleService(
             ?.filter { it.isValidDetectedPhrase(articleText) }
             ?.distinctBy { it.lowercase() }
             .orEmpty()
+    }
+
+    override suspend fun summarizeArticle(articleText: String): ArticleSummary {
+        if (articleText.isBlank()) return ArticleSummary.Empty
+
+        val content = sendJsonChatRequest(
+            systemMessage = """
+                You are a news editor and Kannada translator helping a Kannada-speaking learner understand English news articles.
+                Return only valid JSON.
+
+                Critical language rule:
+                - whatHappenedEnglish and gistEnglish MUST be in plain, simple English (CEFR A2 level).
+                - whatHappenedKannada and gistKannada MUST be in Kannada language using Kannada script only.
+                - Never use Telugu, Malayalam, Tamil, Hindi, Devanagari, romanized Kannada, or transliteration in the Kannada fields.
+            """.trimIndent(),
+            userMessage = """
+                Read the article below and produce a short two-part summary that helps the reader quickly understand the article.
+
+                Part 1 — "What happened":
+                - One or two simple sentences describing the concrete event or news in this article.
+                - Focus on facts: who, what, when, where.
+
+                Part 2 — "What this article is about":
+                - One or two simple sentences describing the broader topic, theme, or angle of the article.
+                - Explain why this story matters or what perspective it takes.
+
+                Style rules:
+                - Use very simple English words. Avoid jargon, idioms, and complex grammar.
+                - Each English field should be one or two sentences only (max ~40 words combined).
+                - Translate each English field faithfully into natural Kannada in Kannada script.
+                - Do not copy sentences verbatim from the article; rewrite in your own simple words.
+                - Do not add commentary, opinions, or extra notes.
+
+                Return JSON exactly in this shape:
+                {
+                  "whatHappenedEnglish": "",
+                  "whatHappenedKannada": "",
+                  "gistEnglish": "",
+                  "gistKannada": ""
+                }
+
+                Article:
+                $articleText
+            """.trimIndent()
+        )
+
+        return ArticleSummary.fromJson(JSONObject(content))
     }
 
     override suspend fun fetchMeaning(

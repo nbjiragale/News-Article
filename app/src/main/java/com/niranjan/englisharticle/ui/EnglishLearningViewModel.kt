@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,6 +33,7 @@ data class EnglishLearningUiState(
     val rawArticleForRetry: String = "",
     val cleanedArticle: CleanArticleResult? = null,
     val isCleaningArticle: Boolean = false,
+    val isSummarizingArticle: Boolean = false,
     val cleaningError: String? = null,
     val selected: SelectedWord? = null,
     val meaningState: MeaningUiState = MeaningUiState.Idle
@@ -278,26 +281,35 @@ class EnglishLearningViewModel(
             }
             _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
 
-            val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                emptyList()
-            }
-            val articleToSave = if (detectedPhrases.isEmpty()) {
-                displayResult
-            } else {
-                displayResult.copy(idiomaticPhrases = detectedPhrases)
+            _uiState.update { it.copy(isSummarizingArticle = true) }
+
+            val (detectedPhrases, summary) = coroutineScope {
+                val phrasesDeferred = async {
+                    runCatching {
+                        articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
+                    }.getOrDefault(emptyList())
+                }
+                val summaryDeferred = async {
+                    runCatching {
+                        articleService.summarizeArticle(displayResult.cleanArticle)
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+                }
+                phrasesDeferred.await() to summaryDeferred.await()
             }
 
-            if (detectedPhrases.isNotEmpty()) {
-                _uiState.update { current ->
-                    if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
-                        current.copy(cleanedArticle = articleToSave)
-                    } else {
-                        current
-                    }
+            val articleToSave = displayResult.copy(
+                idiomaticPhrases = detectedPhrases.ifEmpty { displayResult.idiomaticPhrases },
+                summary = summary ?: displayResult.summary
+            )
+
+            _uiState.update { current ->
+                if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
+                    current.copy(
+                        cleanedArticle = articleToSave,
+                        isSummarizingArticle = false
+                    )
+                } else {
+                    current.copy(isSummarizingArticle = false)
                 }
             }
 

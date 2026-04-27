@@ -5,6 +5,8 @@ interface ArticleAiService {
 
     suspend fun extractIdiomaticPhrases(articleText: String): List<String>
 
+    suspend fun summarizeArticle(articleText: String): ArticleSummary
+
     suspend fun fetchMeaning(
         articleText: String,
         sentence: String,

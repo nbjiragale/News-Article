@@ -34,7 +34,7 @@ import com.niranjan.englisharticle.ui.screens.MeaningSheet
 import com.niranjan.englisharticle.ui.screens.PracticeScreen
 import com.niranjan.englisharticle.ui.screens.RecentArticlesScreen
 import com.niranjan.englisharticle.ui.screens.SavedWordsScreen
-import com.niranjan.englisharticle.ui.tts.rememberArticleTextToSpeech
+import com.niranjan.englisharticle.ui.tts.rememberArticleSpeaker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +44,7 @@ fun EnglishLearningApp(
     sharedArticleText: SharedArticleText? = null,
     onSharedArticleTextHandled: (Long) -> Unit = {}
 ) {
-    val textToSpeech = rememberArticleTextToSpeech()
+    val textToSpeech = rememberArticleSpeaker()
     val navController = rememberNavController()
     val viewModel: EnglishLearningViewModel = viewModel(
         factory = remember(articleService, localStore) {
@@ -123,11 +123,13 @@ fun EnglishLearningApp(
                         onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) }
                     )
                 } else {
+                    val isListening by textToSpeech.isArticleSpeaking
                     ArticleViewerScreen(
                         article = currentArticle,
                         isSummarizing = uiState.isSummarizingArticle,
                         summaryError = uiState.summaryError,
                         onBackToInput = {
+                            textToSpeech.stop()
                             viewModel.clearCurrentArticle()
                             navController.navigate(AppRoute.Input) {
                                 popUpTo(AppRoute.Input) { inclusive = false }
@@ -139,8 +141,16 @@ fun EnglishLearningApp(
                         onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
                         onWordTap = viewModel::selectWord,
                         onRequestContext = viewModel::requestArticleContext,
-                        onSpeakEnglish = textToSpeech::speakEnglish,
+                        onSpeakEnglish = textToSpeech::speakArticleEnglish,
                         onSpeakKannada = textToSpeech::speakKannada,
+                        isListening = isListening,
+                        onToggleListen = {
+                            if (isListening) {
+                                textToSpeech.stop()
+                            } else {
+                                textToSpeech.speakArticleEnglish(currentArticle.cleanArticle)
+                            }
+                        },
                     )
                 }
             }

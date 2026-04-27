@@ -39,6 +39,11 @@ class ArticleTextToSpeech(context: Context) : TextToSpeech.OnInitListener {
         )
     }
 
+    fun stop() {
+        engine?.stop()
+        pendingSpeech = null
+    }
+
     fun shutdown() {
         engine?.stop()
         engine?.shutdown()

@@ -38,6 +38,16 @@ android {
             "OPENROUTER_MODEL",
             (localProperties.getProperty("openrouter.model") ?: "google/gemini-2.5-flash").asBuildConfigString()
         )
+        buildConfigField(
+            "String",
+            "DEEPGRAM_API_KEY",
+            (localProperties.getProperty("deepgram.api.key") ?: "").asBuildConfigString()
+        )
+        buildConfigField(
+            "String",
+            "DEEPGRAM_VOICE",
+            (localProperties.getProperty("deepgram.voice") ?: "aura-asteria-en").asBuildConfigString()
+        )
     }
 
     buildTypes {

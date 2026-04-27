@@ -34,7 +34,6 @@ import com.niranjan.englisharticle.ui.screens.MeaningSheet
 import com.niranjan.englisharticle.ui.screens.PracticeScreen
 import com.niranjan.englisharticle.ui.screens.RecentArticlesScreen
 import com.niranjan.englisharticle.ui.screens.SavedWordsScreen
-import com.niranjan.englisharticle.ui.theme.AppSurfaceContainerLowest
 import com.niranjan.englisharticle.ui.tts.rememberArticleTextToSpeech
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,9 +186,9 @@ fun EnglishLearningApp(
         ModalBottomSheet(
             onDismissRequest = viewModel::dismissMeaning,
             sheetState = sheetState,
-            containerColor = AppSurfaceContainerLowest,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            scrimColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            scrimColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
             dragHandle = { BottomSheetHandle() }
         ) {
             MeaningSheet(

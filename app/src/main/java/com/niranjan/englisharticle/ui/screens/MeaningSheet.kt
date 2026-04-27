@@ -1,6 +1,5 @@
 package com.niranjan.englisharticle.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,10 +19,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,8 +42,6 @@ import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.domain.MeaningResult
 import com.niranjan.englisharticle.ui.components.HighlightedSentence
 import com.niranjan.englisharticle.ui.state.MeaningUiState
-import com.niranjan.englisharticle.ui.theme.AppPrimaryContainer
-import com.niranjan.englisharticle.ui.theme.AppSurfaceContainerLow
 
 @Composable
 fun MeaningSheet(
@@ -158,77 +159,38 @@ fun MeaningSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LookupModeToggle(
     showSentence: Boolean,
     sentenceAvailable: Boolean,
     onChangeMode: (Boolean) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = AppSurfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+    SingleChoiceSegmentedButtonRow(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        SegmentedButton(
+            selected = !showSentence,
+            onClick = { onChangeMode(false) },
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            colors = SegmentedButtonDefaults.colors(
+                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         ) {
-            LookupModeOption(
-                label = "Word",
-                selected = !showSentence,
-                enabled = true,
-                onClick = { onChangeMode(false) },
-                modifier = Modifier.weight(1f)
-            )
-            LookupModeOption(
-                label = "Sentence",
-                selected = showSentence,
-                enabled = sentenceAvailable,
-                onClick = { onChangeMode(true) },
-                modifier = Modifier.weight(1f)
-            )
+            Text("Word", style = MaterialTheme.typography.labelLarge)
         }
-    }
-}
-
-@Composable
-private fun LookupModeOption(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        Color.Transparent
-    }
-    val contentColor = when {
-        selected -> MaterialTheme.colorScheme.onPrimary
-        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    Surface(
-        onClick = onClick,
-        enabled = enabled && !selected,
-        shape = RoundedCornerShape(10.dp),
-        color = containerColor,
-        contentColor = contentColor,
-        modifier = modifier.height(40.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+        SegmentedButton(
+            selected = showSentence,
+            onClick = { onChangeMode(true) },
+            enabled = sentenceAvailable,
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            colors = SegmentedButtonDefaults.colors(
+                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
             )
+        ) {
+            Text("Sentence", style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -246,24 +208,24 @@ private fun MeaningSheetHeader(
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = word,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (partOfSpeech.isNotBlank()) {
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 ) {
                     Text(
                         text = partOfSpeech.uppercase(),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        style = MaterialTheme.typography.labelLarge
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -272,7 +234,7 @@ private fun MeaningSheetHeader(
             onClick = onSpeak,
             enabled = word.isNotBlank(),
             modifier = Modifier
-                .size(40.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer)
         ) {
@@ -323,18 +285,15 @@ private fun MeaningInfoCard(
 ) {
     if (value.isBlank()) return
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = AppSurfaceContainerLow,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 92.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -344,8 +303,9 @@ private fun MeaningInfoCard(
                 Text(
                     text = label.uppercase(),
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.outline
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (onSpeak != null) {
                     SmallSpeakButton(
@@ -357,7 +317,7 @@ private fun MeaningInfoCard(
             SelectionContainer {
                 Text(
                     text = value,
-                    style = if (emphasize) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyMedium,
+                    style = if (emphasize) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
                     color = if (emphasize) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
             }
@@ -381,13 +341,12 @@ private fun MeaningContextCard(
     if (englishContext.isBlank() && kannadaContext.isBlank()) return
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = AppPrimaryContainer.copy(alpha = 0.2f),
-        border = BorderStroke(1.dp, AppPrimaryContainer),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
@@ -404,7 +363,8 @@ private fun MeaningContextCard(
                 Text(
                     text = sectionTitle,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 if (englishContext.isNotBlank()) {
@@ -489,11 +449,13 @@ private fun MeaningActions(
             enabled = !isSaved,
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
+                .height(56.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                disabledContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                disabledContentColor = MaterialTheme.colorScheme.onTertiaryContainer
             )
         ) {
             Row(
@@ -501,14 +463,17 @@ private fun MeaningActions(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_bookmark_plus),
+                    painter = painterResource(
+                        if (isSaved) R.drawable.ic_bookmark else R.drawable.ic_bookmark_plus
+                    ),
                     contentDescription = null,
                     modifier = Modifier.size(18.dp)
                 )
                 androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (isSaved) "Saved" else "Save Word",
-                    style = MaterialTheme.typography.labelLarge
+                    text = if (isSaved) "Saved" else "Save",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -516,8 +481,8 @@ private fun MeaningActions(
             onClick = onPractice,
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
+                .height(56.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -533,7 +498,11 @@ private fun MeaningActions(
                     modifier = Modifier.size(18.dp)
                 )
                 androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
-                Text("Practice", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    "Practice",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

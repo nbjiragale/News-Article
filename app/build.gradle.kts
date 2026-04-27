@@ -36,7 +36,7 @@ android {
         buildConfigField(
             "String",
             "OPENROUTER_MODEL",
-            (localProperties.getProperty("openrouter.model") ?: "google/gemini-2.5-flash-lite").asBuildConfigString()
+            (localProperties.getProperty("openrouter.model") ?: "google/gemini-2.5-flash").asBuildConfigString()
         )
     }
 

@@ -206,6 +206,7 @@ fun EnglishLearningApp(
                     viewModel.dismissMeaning()
                     navController.navigateSingleTop(AppRoute.Practice)
                 },
+                onChangeMode = viewModel::setLookupMode,
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)
             )
         }

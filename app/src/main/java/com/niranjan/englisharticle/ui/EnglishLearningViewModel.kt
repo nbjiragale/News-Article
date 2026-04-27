@@ -193,6 +193,12 @@ class EnglishLearningViewModel(
         }
     }
 
+    fun setLookupMode(showSentence: Boolean) {
+        val current = uiState.value.selected ?: return
+        if (current.showSentence == showSentence) return
+        selectWord(current.copy(showSentence = showSentence))
+    }
+
     fun saveSelectedWord(result: MeaningResult) {
         val currentState = uiState.value
         val tapped = currentState.selected ?: return

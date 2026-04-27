@@ -53,22 +53,34 @@ fun MeaningSheet(
     onSpeakKannada: (String) -> Unit,
     onSaveWord: (MeaningResult) -> Unit,
     onPractice: (MeaningResult) -> Unit,
+    onChangeMode: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        MeaningSheetHeader(
+            word = word,
+            partOfSpeech = (state as? MeaningUiState.Success)
+                ?.result
+                ?.partOfSpeech
+                ?.ifBlank { if (showSentence) "Sentence context" else "Word" }
+                ?: if (showSentence) "Sentence context" else "",
+            onSpeak = { onSpeakEnglish(word) }
+        )
+
+        LookupModeToggle(
+            showSentence = showSentence,
+            sentenceAvailable = sentence.isNotBlank(),
+            onChangeMode = onChangeMode
+        )
+
         when (state) {
             MeaningUiState.Idle,
             MeaningUiState.Loading -> {
-                MeaningSheetHeader(
-                    word = word,
-                    partOfSpeech = "",
-                    onSpeak = { onSpeakEnglish(word) }
-                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -83,11 +95,6 @@ fun MeaningSheet(
             }
 
             is MeaningUiState.Error -> {
-                MeaningSheetHeader(
-                    word = word,
-                    partOfSpeech = "",
-                    onSpeak = { onSpeakEnglish(word) }
-                )
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
@@ -110,31 +117,118 @@ fun MeaningSheet(
             }
 
             is MeaningUiState.Success -> {
-                MeaningSheetHeader(
-                    word = word,
-                    partOfSpeech = state.result.partOfSpeech.ifBlank { "Word" },
-                    onSpeak = { onSpeakEnglish(word) }
-                )
-                MeaningSummary(
-                    result = state.result,
-                    showSentence = showSentence,
-                    onSpeakEnglish = onSpeakEnglish,
-                    onSpeakKannada = onSpeakKannada
-                )
-                MeaningContextCard(
-                    word = word,
-                    sentence = sentence,
-                    showSentence = showSentence,
-                    result = state.result,
-                    onSpeakEnglish = onSpeakEnglish,
-                    onSpeakKannada = onSpeakKannada
-                )
+                if (showSentence) {
+                    MeaningContextCard(
+                        word = word,
+                        sentence = sentence,
+                        showSentence = true,
+                        result = state.result,
+                        onSpeakEnglish = onSpeakEnglish,
+                        onSpeakKannada = onSpeakKannada
+                    )
+                    MeaningSummary(
+                        result = state.result,
+                        showSentence = true,
+                        onSpeakEnglish = onSpeakEnglish,
+                        onSpeakKannada = onSpeakKannada
+                    )
+                } else {
+                    MeaningSummary(
+                        result = state.result,
+                        showSentence = false,
+                        onSpeakEnglish = onSpeakEnglish,
+                        onSpeakKannada = onSpeakKannada
+                    )
+                    MeaningContextCard(
+                        word = word,
+                        sentence = sentence,
+                        showSentence = false,
+                        result = state.result,
+                        onSpeakEnglish = onSpeakEnglish,
+                        onSpeakKannada = onSpeakKannada
+                    )
+                }
                 MeaningActions(
                     isSaved = isSaved,
                     onSaveWord = { onSaveWord(state.result) },
                     onPractice = { onPractice(state.result) }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun LookupModeToggle(
+    showSentence: Boolean,
+    sentenceAvailable: Boolean,
+    onChangeMode: (Boolean) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = AppSurfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            LookupModeOption(
+                label = "Word",
+                selected = !showSentence,
+                enabled = true,
+                onClick = { onChangeMode(false) },
+                modifier = Modifier.weight(1f)
+            )
+            LookupModeOption(
+                label = "Sentence",
+                selected = showSentence,
+                enabled = sentenceAvailable,
+                onClick = { onChangeMode(true) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LookupModeOption(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color.Transparent
+    }
+    val contentColor = when {
+        selected -> MaterialTheme.colorScheme.onPrimary
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        onClick = onClick,
+        enabled = enabled && !selected,
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        modifier = modifier.height(40.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+            )
         }
     }
 }

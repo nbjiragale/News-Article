@@ -48,6 +48,11 @@ android {
             "DEEPGRAM_VOICE",
             (localProperties.getProperty("deepgram.voice") ?: "aura-asteria-en").asBuildConfigString()
         )
+        buildConfigField(
+            "int",
+            "DEEPGRAM_AUDIO_OFFSET_MS",
+            (localProperties.getProperty("deepgram.audio.offset.ms") ?: "0")
+        )
     }
 
     buildTypes {

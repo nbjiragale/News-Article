@@ -3,6 +3,8 @@ package com.niranjan.englisharticle
 import com.niranjan.englisharticle.ui.tts.SttWord
 import com.niranjan.englisharticle.ui.tts.WordTimings
 import com.niranjan.englisharticle.ui.tts.alignSttWithSource
+import com.niranjan.englisharticle.ui.tts.alignSttWithSourceVerbose
+import com.niranjan.englisharticle.ui.tts.applyAudioOffset
 import com.niranjan.englisharticle.ui.tts.buildChunkPlans
 import com.niranjan.englisharticle.ui.tts.chunkForTts
 import com.niranjan.englisharticle.ui.tts.parseSttWords
@@ -191,5 +193,59 @@ class DeepgramChunkTest {
     fun `parseSttWords on empty results returns empty list`() {
         val words = parseSttWords("""{"results":{"channels":[]}}""")
         assertEquals(0, words.size)
+    }
+
+    @Test
+    fun `alignment lookahead absorbs number-spelling token expansion`() {
+        // "in 2024 the report" -> STT spells the year as four tokens.
+        val source = listOf("in", "2024", "the", "report")
+        val stt = listOf(
+            SttWord("in", 0, 100),
+            SttWord("twenty", 200, 400),
+            SttWord("twenty", 400, 600),
+            SttWord("twenty", 600, 800),
+            SttWord("four", 800, 1000),
+            SttWord("the", 1100, 1200),
+            SttWord("report", 1300, 1700)
+        )
+        val starts = alignSttWithSource(source, stt)
+        assertNotNull(starts)
+        assertEquals(0, starts!![0])
+        // "the" must align even though five extra STT tokens sit between "in" and "the".
+        assertEquals(1100, starts[2])
+        assertEquals(1300, starts[3])
+    }
+
+    @Test
+    fun `verbose alignment reports matched count`() {
+        val source = listOf("alpha", "beta", "gamma")
+        val stt = listOf(
+            SttWord("alpha", 0, 100),
+            SttWord("gamma", 400, 500)
+        )
+        val (starts, matched) = alignSttWithSourceVerbose(source, stt)
+        assertNotNull(starts)
+        assertEquals(2, matched)
+    }
+
+    @Test
+    fun `applyAudioOffset shifts every start by the given milliseconds`() {
+        val starts = intArrayOf(0, 100, 250, 999)
+        val shifted = applyAudioOffset(starts, 150)
+        assertEquals(listOf(150, 250, 400, 1149), shifted.toList())
+    }
+
+    @Test
+    fun `applyAudioOffset zero is a no-op`() {
+        val starts = intArrayOf(10, 20, 30)
+        val shifted = applyAudioOffset(starts, 0)
+        assertEquals(starts.toList(), shifted.toList())
+    }
+
+    @Test
+    fun `applyAudioOffset clamps negative results at zero`() {
+        val starts = intArrayOf(0, 100, 200)
+        val shifted = applyAudioOffset(starts, -150)
+        assertEquals(listOf(0, 0, 50), shifted.toList())
     }
 }

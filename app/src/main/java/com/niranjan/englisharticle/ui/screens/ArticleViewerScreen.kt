@@ -12,11 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,6 +40,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -45,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.WordToken
 import com.niranjan.englisharticle.domain.WordTokenGroup
@@ -108,6 +115,20 @@ fun ArticleViewerScreen(
         }
     }
     val lookedUpWords = remember { mutableStateSetOf<String>() }
+    val context = LocalContext.current
+    val highlightPrefs = remember(context) {
+        context.applicationContext.getSharedPreferences(
+            HIGHLIGHT_PREFS_NAME,
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+    var highlightingEnabled by remember {
+        mutableStateOf(highlightPrefs.getBoolean(HIGHLIGHT_PREF_KEY, true))
+    }
+    LaunchedEffect(highlightingEnabled) {
+        highlightPrefs.edit().putBoolean(HIGHLIGHT_PREF_KEY, highlightingEnabled).apply()
+    }
+    val effectiveWordIndex = if (highlightingEnabled) currentWordIndex else null
     val listState = rememberLazyListState()
     val readingProgress by remember {
         derivedStateOf {
@@ -125,8 +146,8 @@ fun ArticleViewerScreen(
         label = "reading_progress"
     )
 
-    LaunchedEffect(currentWordIndex, paragraphs) {
-        val wordIndex = currentWordIndex ?: return@LaunchedEffect
+    LaunchedEffect(effectiveWordIndex, paragraphs) {
+        val wordIndex = effectiveWordIndex ?: return@LaunchedEffect
         val paragraphIndex = paragraphWordOffsets.indexOfLast { it <= wordIndex }
             .takeIf { it >= 0 } ?: return@LaunchedEffect
         val targetLazyIndex = 1 + paragraphIndex
@@ -215,7 +236,7 @@ fun ArticleViewerScreen(
                             articleBody = articleBody,
                             isFirstBodyParagraph = paraIndex == firstBodyParagraphIndex,
                             paragraphFirstWordIndex = paragraphWordOffsets.getOrElse(paraIndex) { 0 },
-                            currentWordIndex = currentWordIndex,
+                            currentWordIndex = effectiveWordIndex,
                             lookedUpWords = lookedUpWords,
                             onWordTap = onWordTap
                         )
@@ -239,21 +260,66 @@ fun ArticleViewerScreen(
                 )
         )
 
-        ArticleListenButton(
-            state = playbackState,
-            onToggle = {
-                when (playbackState) {
-                    ArticlePlaybackState.Idle -> startFromCurrentScroll()
-                    ArticlePlaybackState.Playing -> onPauseListening()
-                    ArticlePlaybackState.Paused -> onResumeListening()
-                }
-            },
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 24.dp)
+                .padding(end = 20.dp, bottom = 24.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            HighlightToggleButton(
+                enabled = highlightingEnabled,
+                onToggle = { highlightingEnabled = !highlightingEnabled }
+            )
+            ArticleListenButton(
+                state = playbackState,
+                onToggle = {
+                    when (playbackState) {
+                        ArticlePlaybackState.Idle -> startFromCurrentScroll()
+                        ArticlePlaybackState.Playing -> onPauseListening()
+                        ArticlePlaybackState.Paused -> onResumeListening()
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun HighlightToggleButton(
+    enabled: Boolean,
+    onToggle: () -> Unit
+) {
+    val containerColor = if (enabled) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    IconButton(
+        onClick = onToggle,
+        modifier = Modifier,
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
+    ) {
+        Icon(
+            painter = painterResource(
+                if (enabled) R.drawable.ic_highlighter else R.drawable.ic_highlighter_off
+            ),
+            contentDescription = if (enabled) "Disable word highlight" else "Enable word highlight",
+            modifier = Modifier.size(20.dp)
         )
     }
 }
+
+private const val HIGHLIGHT_PREFS_NAME = "article_viewer_prefs"
+private const val HIGHLIGHT_PREF_KEY = "highlight_word_enabled"
 
 @Composable
 private fun ArticleHeading(text: String) {

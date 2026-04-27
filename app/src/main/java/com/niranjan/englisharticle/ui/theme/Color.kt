@@ -1,0 +1,32 @@
+package com.niranjan.englisharticle.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val AppPrimary = Color(0xFF15196C)
+val AppOnPrimary = Color(0xFFFFFFFF)
+val AppPrimaryContainer = Color(0xFFE0E0FF)
+val AppOnPrimaryContainer = Color(0xFF070963)
+val AppSecondary = Color(0xFF585A8C)
+val AppSecondaryContainer = Color(0xFFC3C4FE)
+val AppOnSecondaryContainer = Color(0xFF4E5082)
+val AppTertiary = Color(0xFF3D1B27)
+val AppSurface = Color(0xFFFBF9F5)
+val AppTopBar = Color(0xFFF7F2EB)
+val AppSurfaceContainerLowest = Color(0xFFFFFFFF)
+val AppSurfaceContainerLow = Color(0xFFF5F3EF)
+val AppSurfaceContainer = Color(0xFFEFEDEA)
+val AppSurfaceContainerHigh = Color(0xFFEAE8E4)
+val AppSurfaceVariant = Color(0xFFE4E2DE)
+val AppOnSurface = Color(0xFF1B1C1A)
+val AppOnSurfaceVariant = Color(0xFF464651)
+val AppOutline = Color(0xFF777682)
+val AppOutlineVariant = Color(0xFFC7C5D3)
+val AppError = Color(0xFFBA1A1A)
+val AppErrorContainer = Color(0xFFFFDAD6)
+val AppOnErrorContainer = Color(0xFF93000A)
+
+val AppDarkBackground = Color(0xFF101114)
+val AppDarkSurface = Color(0xFF1B1C20)
+val AppDarkSurfaceVariant = Color(0xFF30312E)
+val AppDarkText = Color(0xFFF2F0ED)
+val AppDarkMuted = Color(0xFFC7C5D3)

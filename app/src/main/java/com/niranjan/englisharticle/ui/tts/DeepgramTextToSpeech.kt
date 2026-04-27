@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.OutputStreamWriter
@@ -85,9 +86,11 @@ class DeepgramTextToSpeech(
                 val chunks = cleaned.chunkForTts(MAX_CHARS_PER_REQUEST)
                 val chunkPlans = buildChunkPlans(chunks)
 
-                val files = try {
+                val synthesized = try {
                     coroutineScope {
-                        chunkPlans.map { plan -> async(Dispatchers.IO) { synthesizeChunk(plan.text) } }.awaitAll()
+                        chunkPlans.map { plan ->
+                            async(Dispatchers.IO) { synthesizeChunk(plan) }
+                        }.awaitAll()
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
@@ -97,7 +100,7 @@ class DeepgramTextToSpeech(
                     return@launch
                 }
 
-                playSequentially(files, chunkPlans, onWordIndex)
+                playSequentially(synthesized, chunkPlans, onWordIndex)
             } finally {
                 onWordIndex(null)
                 onComplete()
@@ -122,8 +125,34 @@ class DeepgramTextToSpeech(
         scope.cancel()
     }
 
-    private suspend fun synthesizeChunk(chunk: String): File = withContext(Dispatchers.IO) {
-        val cacheFile = cacheFileFor(chunk)
+    private suspend fun synthesizeChunk(plan: ChunkPlan): SynthesizedChunk = withContext(Dispatchers.IO) {
+        val mp3File = ensureMp3(plan.text)
+        val timingsFile = timingsCacheFileFor(plan.text)
+
+        val cachedStarts = if (timingsFile.exists()) loadTimings(timingsFile, plan.sourceWords.size) else null
+        if (cachedStarts != null) {
+            return@withContext SynthesizedChunk(mp3File, cachedStarts)
+        }
+
+        // Cache miss — try Deepgram STT for accurate per-word timing.
+        val realStarts = try {
+            val sttWords = fetchSttWordTimings(mp3File)
+            alignSttWithSource(plan.sourceWords, sttWords)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            Log.w(TAG, "Deepgram STT failed; will fall back to estimated word timings", error)
+            null
+        }
+
+        if (realStarts != null) {
+            runCatching { saveTimings(timingsFile, realStarts) }
+        }
+        SynthesizedChunk(mp3File, realStarts)
+    }
+
+    private suspend fun ensureMp3(chunk: String): File = withContext(Dispatchers.IO) {
+        val cacheFile = mp3CacheFileFor(chunk)
         if (cacheFile.exists() && cacheFile.length() > 0L) {
             return@withContext cacheFile
         }
@@ -131,7 +160,7 @@ class DeepgramTextToSpeech(
         val tempFile = File(cacheDir, cacheFile.name + ".tmp")
         tempFile.delete()
 
-        val connection = (URL(deepgramUrl()).openConnection() as HttpURLConnection).apply {
+        val connection = (URL(deepgramSpeakUrl()).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = CONNECT_TIMEOUT_MS
@@ -149,7 +178,7 @@ class DeepgramTextToSpeech(
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
                 val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                throw DeepgramException("Deepgram returned $responseCode: $errorBody")
+                throw DeepgramException("Deepgram speak returned $responseCode: $errorBody")
             }
 
             connection.inputStream.use { input ->
@@ -166,19 +195,44 @@ class DeepgramTextToSpeech(
         }
     }
 
+    private suspend fun fetchSttWordTimings(mp3File: File): List<SttWord> = withContext(Dispatchers.IO) {
+        val connection = (URL(deepgramListenUrl()).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            setRequestProperty("Authorization", "Token $apiKey")
+            setRequestProperty("Content-Type", "audio/mpeg")
+            setFixedLengthStreamingMode(mp3File.length())
+        }
+        try {
+            mp3File.inputStream().use { input ->
+                connection.outputStream.use { output -> input.copyTo(output) }
+            }
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val body = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                throw DeepgramException("Deepgram listen returned $responseCode: $body")
+            }
+            val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+            parseSttWords(responseText)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private suspend fun playSequentially(
-        files: List<File>,
+        synthesized: List<SynthesizedChunk>,
         plans: List<ChunkPlan>,
         onWordIndex: (Int?) -> Unit
     ) {
-        for ((index, file) in files.withIndex()) {
-            val plan = plans[index]
-            playFile(file, plan, onWordIndex)
+        for ((index, chunk) in synthesized.withIndex()) {
+            playFile(chunk, plans[index], onWordIndex)
         }
     }
 
     private suspend fun playFile(
-        file: File,
+        chunk: SynthesizedChunk,
         plan: ChunkPlan,
         onWordIndex: (Int?) -> Unit
     ) = withContext(Dispatchers.Main) {
@@ -186,10 +240,11 @@ class DeepgramTextToSpeech(
         player = mediaPlayer
 
         try {
-            mediaPlayer.setDataSource(file.absolutePath)
+            mediaPlayer.setDataSource(chunk.file.absolutePath)
             mediaPlayer.prepare()
             val durationMs = mediaPlayer.duration.coerceAtLeast(1)
-            val wordTimings = plan.wordTimingsForDuration(durationMs)
+            val starts = chunk.realStartsMs ?: plan.estimatedWordStartsForDuration(durationMs)
+            val wordTimings = WordTimings(starts)
 
             val tracker = scope.launch {
                 var lastEmitted: Int = Int.MIN_VALUE
@@ -240,15 +295,51 @@ class DeepgramTextToSpeech(
         }
     }
 
-    private fun cacheFileFor(chunk: String): File {
+    private fun mp3CacheFileFor(chunk: String): File =
+        File(cacheDir, "${hashKey(chunk)}.mp3")
+
+    private fun timingsCacheFileFor(chunk: String): File =
+        File(cacheDir, "${hashKey(chunk)}.timings.json")
+
+    private fun hashKey(chunk: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest("$voice|$chunk".toByteArray(Charsets.UTF_8))
+        return digest.digest("$voice|$chunk".toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-        return File(cacheDir, "$hash.mp3")
     }
 
-    private fun deepgramUrl(): String =
+    private fun loadTimings(file: File, expectedSize: Int): IntArray? {
+        return try {
+            val text = file.readText()
+            val obj = JSONObject(text)
+            if (obj.optInt("v", -1) != TIMINGS_FORMAT_VERSION) return null
+            val arr = obj.optJSONArray("starts") ?: return null
+            if (arr.length() != expectedSize) return null
+            IntArray(arr.length()) { arr.getInt(it) }
+        } catch (error: Throwable) {
+            Log.w(TAG, "Failed to load cached timings; ignoring", error)
+            null
+        }
+    }
+
+    private fun saveTimings(file: File, starts: IntArray) {
+        val arr = JSONArray()
+        for (s in starts) arr.put(s)
+        val obj = JSONObject()
+            .put("v", TIMINGS_FORMAT_VERSION)
+            .put("starts", arr)
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(obj.toString())
+        if (!tmp.renameTo(file)) {
+            tmp.copyTo(file, overwrite = true)
+            tmp.delete()
+        }
+    }
+
+    private fun deepgramSpeakUrl(): String =
         "https://api.deepgram.com/v1/speak?model=$voice&encoding=mp3"
+
+    private fun deepgramListenUrl(): String =
+        "https://api.deepgram.com/v1/listen?model=$STT_MODEL&punctuate=true&smart_format=false&filler_words=false"
 
     private class DeepgramException(message: String) : RuntimeException(message)
 
@@ -259,26 +350,44 @@ class DeepgramTextToSpeech(
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 60_000
         private const val WORD_TICK_MS = 40L
+        private const val STT_MODEL = "nova-3"
+        private const val TIMINGS_FORMAT_VERSION = 1
     }
 }
+
+internal data class SynthesizedChunk(
+    val file: File,
+    /** Per-source-word start timestamps in milliseconds. Null when only a duration-based estimate is available. */
+    val realStartsMs: IntArray?
+)
+
+internal data class SttWord(
+    val word: String,
+    val startMs: Int,
+    val endMs: Int
+)
 
 internal data class ChunkPlan(
     val text: String,
     /** Index in the global word list of the first word in this chunk. */
     val firstGlobalWordIndex: Int,
-    /** Character length of each word in the chunk (in order). */
-    val wordCharLengths: IntArray
+    /** Source words from the chunk text, in order. */
+    val sourceWords: List<String>
 ) {
-    fun wordTimingsForDuration(durationMs: Int): WordTimings {
-        if (wordCharLengths.isEmpty()) return WordTimings(IntArray(0))
+    /** Character length of each word (in order); used by [estimatedWordStartsForDuration]. */
+    val wordCharLengths: IntArray = IntArray(sourceWords.size) { sourceWords[it].length }
+
+    /** Fallback: distribute [durationMs] proportionally across words by character length. */
+    fun estimatedWordStartsForDuration(durationMs: Int): IntArray {
+        if (sourceWords.isEmpty()) return IntArray(0)
         val totalChars = wordCharLengths.sum().coerceAtLeast(1)
-        val starts = IntArray(wordCharLengths.size)
+        val starts = IntArray(sourceWords.size)
         var accumulated = 0
-        for (i in wordCharLengths.indices) {
+        for (i in sourceWords.indices) {
             starts[i] = (accumulated.toLong() * durationMs / totalChars).toInt()
             accumulated += wordCharLengths[i]
         }
-        return WordTimings(starts)
+        return starts
     }
 }
 
@@ -305,11 +414,10 @@ internal fun buildChunkPlans(chunks: List<String>): List<ChunkPlan> {
     var globalIndex = 0
     for (chunk in chunks) {
         val words = WORD_REGEX.findAll(chunk).map { it.value }.toList()
-        val lengths = IntArray(words.size) { words[it].length }
         plans += ChunkPlan(
             text = chunk,
             firstGlobalWordIndex = globalIndex,
-            wordCharLengths = lengths
+            sourceWords = words
         )
         globalIndex += words.size
     }
@@ -358,6 +466,122 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
 
     return chunks
 }
+
+/**
+ * Aligns Deepgram STT word output with the source words from the chunk text and returns one
+ * start-millisecond timestamp per source word. Returns null if alignment quality is too poor to
+ * trust (so the caller can fall back to estimation).
+ *
+ * Strategy: greedy forward-walk pairing on normalized tokens (lowercased, alphanumeric-only).
+ * Allows STT to merge or split a few words via a small lookahead window. Gaps are linearly
+ * interpolated between matched neighbors.
+ */
+internal fun alignSttWithSource(
+    sourceWords: List<String>,
+    sttWords: List<SttWord>
+): IntArray? {
+    val n = sourceWords.size
+    if (n == 0) return IntArray(0)
+    if (sttWords.isEmpty()) return null
+
+    val starts = IntArray(n) { -1 }
+    var sttIdx = 0
+
+    for (srcIdx in sourceWords.indices) {
+        val srcNorm = normalizeForAlignment(sourceWords[srcIdx])
+        if (srcNorm.isEmpty()) continue
+        val windowEnd = minOf(sttIdx + ALIGNMENT_LOOKAHEAD, sttWords.size)
+        var matched = -1
+        for (j in sttIdx until windowEnd) {
+            val sttNorm = normalizeForAlignment(sttWords[j].word)
+            if (sttNorm.isEmpty()) continue
+            val isMatch = sttNorm == srcNorm ||
+                (sttNorm.length >= 3 && srcNorm.length >= 3 &&
+                    (sttNorm.contains(srcNorm) || srcNorm.contains(sttNorm))) ||
+                (sttNorm.length >= 4 && srcNorm.length >= 4 &&
+                    sttNorm.commonPrefixWith(srcNorm).length >= minOf(sttNorm.length, srcNorm.length) - 1)
+            if (isMatch) {
+                matched = j
+                break
+            }
+        }
+        if (matched >= 0) {
+            starts[srcIdx] = sttWords[matched].startMs
+            sttIdx = matched + 1
+        }
+    }
+
+    val matchedCount = starts.count { it >= 0 }
+    // If fewer than half of the source words could be aligned, the STT output is likely off.
+    if (matchedCount < (n + 1) / 2) return null
+
+    fillAlignmentGaps(starts, sttWords)
+    enforceMonotonic(starts)
+    return starts
+}
+
+private fun normalizeForAlignment(word: String): String =
+    word.lowercase().filter { it.isLetterOrDigit() }
+
+private fun fillAlignmentGaps(starts: IntArray, sttWords: List<SttWord>) {
+    val n = starts.size
+    val totalAudioMs = sttWords.lastOrNull()?.endMs ?: 0
+    var i = 0
+    while (i < n) {
+        if (starts[i] >= 0) {
+            i++
+            continue
+        }
+        var prev = i - 1
+        while (prev >= 0 && starts[prev] < 0) prev--
+        var next = i + 1
+        while (next < n && starts[next] < 0) next++
+
+        val prevTime = if (prev >= 0) starts[prev] else 0
+        val nextTime = if (next < n) starts[next] else totalAudioMs.coerceAtLeast(prevTime)
+        val gapEnd = if (next < n) next else n
+        val gapStart = if (prev >= 0) prev else -1
+        val span = (gapEnd - gapStart).coerceAtLeast(1)
+        for (k in (gapStart + 1) until gapEnd) {
+            val ratio = (k - gapStart).toDouble() / span
+            starts[k] = (prevTime + ratio * (nextTime - prevTime)).toInt().coerceAtLeast(0)
+        }
+        i = gapEnd
+    }
+}
+
+private fun enforceMonotonic(starts: IntArray) {
+    for (i in 1 until starts.size) {
+        if (starts[i] < starts[i - 1]) starts[i] = starts[i - 1]
+    }
+}
+
+internal fun parseSttWords(jsonText: String): List<SttWord> {
+    val root = JSONObject(jsonText)
+    val results = root.optJSONObject("results") ?: return emptyList()
+    val channels = results.optJSONArray("channels") ?: return emptyList()
+    if (channels.length() == 0) return emptyList()
+    val firstChannel = channels.optJSONObject(0) ?: return emptyList()
+    val alternatives = firstChannel.optJSONArray("alternatives") ?: return emptyList()
+    if (alternatives.length() == 0) return emptyList()
+    val firstAlt = alternatives.optJSONObject(0) ?: return emptyList()
+    val words = firstAlt.optJSONArray("words") ?: return emptyList()
+    val list = mutableListOf<SttWord>()
+    for (i in 0 until words.length()) {
+        val w = words.optJSONObject(i) ?: continue
+        val text = w.optString("punctuated_word", w.optString("word", ""))
+        val start = w.optDouble("start", 0.0)
+        val end = w.optDouble("end", start)
+        list += SttWord(
+            word = text,
+            startMs = (start * 1000.0).toInt().coerceAtLeast(0),
+            endMs = (end * 1000.0).toInt().coerceAtLeast(0)
+        )
+    }
+    return list
+}
+
+private const val ALIGNMENT_LOOKAHEAD = 4
 
 private val SENTENCE_SPLIT_REGEX = Regex("(?<=[.!?])\\s+")
 private val WORD_REGEX = Regex("\\S+")

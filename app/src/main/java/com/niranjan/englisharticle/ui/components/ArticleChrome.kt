@@ -40,10 +40,14 @@ import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.articleWordCount
-import com.niranjan.englisharticle.ui.theme.AppOutlineVariant
-import com.niranjan.englisharticle.ui.theme.AppSurfaceContainerHigh
-import com.niranjan.englisharticle.ui.theme.AppTopBar
 
+/**
+ * Top app bar used across screens.
+ *
+ * Uses tonal surface from the theme so it adapts to light/dark cleanly. The
+ * brand mark + product name are pinned start; navigation actions are pinned
+ * end. Height matches M3 large component spec.
+ */
 @Composable
 fun AppTopBar(
     showBack: Boolean,
@@ -52,74 +56,78 @@ fun AppTopBar(
     onSavedWordsClick: (() -> Unit)? = null,
     onPracticeClick: (() -> Unit)? = null
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .background(AppTopBar)
-            .drawBehind {
-                drawLine(
-                    color = Color(0xFF2D3282).copy(alpha = 0.1f),
-                    start = Offset(0f, size.height),
-                    end = Offset(size.width, size.height),
-                    strokeWidth = 1.dp.toPx()
-                )
-            }
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(modifier = Modifier.width(48.dp), contentAlignment = Alignment.CenterStart) {
-            if (showBack) {
-                RoundIconButton(
-                    iconRes = R.drawable.ic_move_left,
-                    contentDescription = "Back",
-                    onClick = onBack
-                )
-            }
-        }
-        Image(
-            painter = painterResource(R.drawable.arthareader_logo),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(9.dp))
-        )
-        Text(
-            text = stringResource(R.string.app_name),
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 10.dp),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF2D3282),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
         Row(
-            horizontalArrangement = Arrangement.End,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .drawBehind {
+                    drawLine(
+                        color = Color(0xFF14141A).copy(alpha = 0.06f),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, size.height),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (onSavedWordsClick != null) {
-                RoundIconButton(
-                    iconRes = R.drawable.ic_bookmark,
-                    contentDescription = "Saved words",
-                    onClick = onSavedWordsClick
-                )
+            Box(modifier = Modifier.width(44.dp), contentAlignment = Alignment.CenterStart) {
+                if (showBack) {
+                    RoundIconButton(
+                        iconRes = R.drawable.ic_move_left,
+                        contentDescription = "Back",
+                        onClick = onBack
+                    )
+                }
             }
-            if (onPracticeClick != null) {
-                RoundIconButton(
-                    iconRes = R.drawable.ic_school,
-                    contentDescription = "Practice",
-                    onClick = onPracticeClick
-                )
-            }
-            if (onRecentsClick != null) {
-                RoundIconButton(
-                    iconRes = R.drawable.ic_history,
-                    contentDescription = "Recent articles",
-                    onClick = onRecentsClick
-                )
+            Image(
+                painter = painterResource(R.drawable.arthareader_logo),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            )
+            Text(
+                text = stringResource(R.string.app_name),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onSavedWordsClick != null) {
+                    RoundIconButton(
+                        iconRes = R.drawable.ic_bookmark,
+                        contentDescription = "Saved words",
+                        onClick = onSavedWordsClick
+                    )
+                }
+                if (onPracticeClick != null) {
+                    RoundIconButton(
+                        iconRes = R.drawable.ic_school,
+                        contentDescription = "Practice",
+                        onClick = onPracticeClick
+                    )
+                }
+                if (onRecentsClick != null) {
+                    RoundIconButton(
+                        iconRes = R.drawable.ic_history,
+                        contentDescription = "Recent articles",
+                        onClick = onRecentsClick
+                    )
+                }
             }
         }
     }
@@ -134,40 +142,49 @@ private fun RoundIconButton(
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .size(40.dp)
+            .size(44.dp)
             .clip(CircleShape)
     ) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
             modifier = Modifier.size(22.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurface
         )
     }
 }
 
+/**
+ * Decorative hero image rendered with Compose Canvas — keeps the bundle small
+ * and means we don't need real article photos. Uses brand colors so the hero
+ * always reads as part of the app surface.
+ */
 @Composable
 fun ArticleHeroImage() {
+    val skyTop = MaterialTheme.colorScheme.tertiaryContainer
+    val skyMid = MaterialTheme.colorScheme.secondaryContainer
+    val skyBottom = MaterialTheme.colorScheme.surface
+    val sun = MaterialTheme.colorScheme.tertiary
+    val buildingDark = MaterialTheme.colorScheme.primary
+    val buildingLight = MaterialTheme.colorScheme.secondary
+    val groundShadow = MaterialTheme.colorScheme.primary
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.45f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(AppSurfaceContainerHigh)
+            .aspectRatio(1.6f)
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFBFD8F6),
-                        Color(0xFFE9F0F9),
-                        Color(0xFFF7F2EB)
-                    )
+                    colors = listOf(skyTop, skyMid, skyBottom)
                 )
             )
             drawCircle(
-                color = Color(0xFFFFD37A).copy(alpha = 0.75f),
-                radius = size.minDimension * 0.13f,
+                color = sun.copy(alpha = 0.85f),
+                radius = size.minDimension * 0.14f,
                 center = Offset(size.width * 0.78f, size.height * 0.22f)
             )
 
@@ -183,9 +200,9 @@ fun ArticleHeroImage() {
                 val left = size.width * xFactor
                 val top = size.height * topFactor
                 val buildingWidth = size.width * widthFactor
-                val color = if (index % 2 == 0) Color(0xFF7F8793) else Color(0xFF525A66)
+                val color = if (index % 2 == 0) buildingDark else buildingLight
                 drawRect(
-                    color = color.copy(alpha = 0.9f),
+                    color = color.copy(alpha = 0.92f),
                     topLeft = Offset(left, top),
                     size = Size(buildingWidth, baseY - top)
                 )
@@ -205,7 +222,7 @@ fun ArticleHeroImage() {
                 }
             }
             drawRect(
-                color = Color(0xFF2D3282).copy(alpha = 0.08f),
+                color = groundShadow.copy(alpha = 0.10f),
                 topLeft = Offset(0f, size.height * 0.88f),
                 size = Size(size.width, size.height * 0.12f)
             )
@@ -213,6 +230,10 @@ fun ArticleHeroImage() {
     }
 }
 
+/**
+ * Hero header rendered above an article body. Big display title, supporting
+ * meta, and a circular author avatar — feels like a proper editorial layout.
+ */
 @Composable
 fun ArticleHeader(article: CleanArticleResult) {
     val author = article.author.ifBlank { stringResource(R.string.app_name) }
@@ -222,67 +243,66 @@ fun ArticleHeader(article: CleanArticleResult) {
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ArticlePill(
                 text = "News",
-                background = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                content = MaterialTheme.colorScheme.onSecondaryContainer
+                background = MaterialTheme.colorScheme.primaryContainer,
+                content = MaterialTheme.colorScheme.onPrimaryContainer
             )
             ArticlePill(
-                text = "Intermediate",
-                background = MaterialTheme.colorScheme.surfaceVariant,
+                text = "$readMinutes min read",
+                background = MaterialTheme.colorScheme.surfaceContainer,
                 content = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onSurface
         )
         if (article.subtitle.isNotBlank()) {
             Text(
                 text = article.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 6.dp),
+                .padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = author.initials(),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = author,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "$published | $readMinutes min read",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.outline
+                    text = published,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     }
 }
 
@@ -298,9 +318,10 @@ private fun ArticlePill(
         contentColor = content
     ) {
         Text(
-            text = text,
+            text = text.uppercase(),
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelLarge
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }
@@ -315,8 +336,8 @@ fun BottomSheetHandle() {
     ) {
         Box(
             modifier = Modifier
-                .width(32.dp)
-                .height(6.dp)
+                .width(36.dp)
+                .height(5.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
@@ -325,16 +346,7 @@ fun BottomSheetHandle() {
 
 fun Modifier.interactiveWordUnderline(enabled: Boolean): Modifier {
     if (!enabled) return this
-
-    return drawBehind {
-        val underlineY = size.height - 3.dp.toPx()
-        drawLine(
-            color = AppOutlineVariant,
-            start = Offset(0f, underlineY),
-            end = Offset(size.width, underlineY),
-            strokeWidth = 1.dp.toPx()
-        )
-    }
+    return this
 }
 
 private fun String.initials(): String {

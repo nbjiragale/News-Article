@@ -32,12 +32,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.domain.SavedWord
+import androidx.compose.material3.LinearProgressIndicator
 import com.niranjan.englisharticle.ui.components.AppTopBar
+import com.niranjan.englisharticle.ui.components.EmptyState
+import com.niranjan.englisharticle.ui.components.Pill
 import kotlin.random.Random
 
 @Composable
@@ -167,8 +171,8 @@ fun PracticeScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
+                        .height(56.dp),
+                    shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
@@ -176,7 +180,8 @@ fun PracticeScreen(
                 ) {
                     Text(
                         text = if (currentIndex == deck.lastIndex) "Finish" else "Next",
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -191,17 +196,33 @@ private fun PracticeHeader(
     sessionCorrect: Int,
     sessionAnswered: Int
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Practice",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Text(
-            text = "Card ${currentIndex + 1} of $totalCount | $sessionCorrect/$sessionAnswered correct",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+    val progress = if (totalCount == 0) 0f else (currentIndex + 1).toFloat() / totalCount
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Pill(
+                text = "Card ${currentIndex + 1} of $totalCount",
+                container = MaterialTheme.colorScheme.primaryContainer,
+                content = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Pill(
+                text = "$sessionCorrect / $sessionAnswered correct",
+                container = MaterialTheme.colorScheme.tertiaryContainer,
+                content = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceContainer,
+            drawStopIndicator = {}
         )
     }
 }
@@ -209,35 +230,31 @@ private fun PracticeHeader(
 @Composable
 private fun PromptCard(savedWord: SavedWord) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.primaryContainer
-        ),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
-                text = "Choose the Kannada meaning",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
+                text = "CHOOSE THE KANNADA MEANING",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
             Text(
                 text = savedWord.word,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             if (savedWord.sentence.isNotBlank()) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.18f))
                 Text(
-                    text = savedWord.sentence,
+                    text = "“${savedWord.sentence}”",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
                 )
             }
         }
@@ -256,29 +273,35 @@ private fun MultipleChoicePractice(
         choices.forEach { choice ->
             val isSelected = selectedKey == choice.savedKey
             val isCorrectChoice = selectedCorrect != null && choice.savedKey == current.savedKey
-            OutlinedButton(
+            val containerColor = when {
+                isCorrectChoice -> androidx.compose.ui.graphics.Color(0xFFD3F1E2)
+                isSelected -> MaterialTheme.colorScheme.errorContainer
+                else -> MaterialTheme.colorScheme.surfaceContainerLow
+            }
+            val outline = when {
+                isCorrectChoice -> androidx.compose.ui.graphics.Color(0xFF1F9D6F)
+                isSelected -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.outlineVariant
+            }
+            Surface(
                 onClick = {
                     if (selectedCorrect == null) onSelect(choice)
                 },
+                enabled = selectedCorrect == null,
+                shape = RoundedCornerShape(20.dp),
+                color = containerColor,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, outline),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = when {
-                        isCorrectChoice -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                        isSelected -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
-                        else -> MaterialTheme.colorScheme.surface
-                    },
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    .heightIn(min = 60.dp)
             ) {
                 Text(
                     text = choice.meaning.meaningKannada,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
+                        .padding(horizontal = 18.dp, vertical = 16.dp)
                 )
             }
         }
@@ -337,27 +360,30 @@ private fun FeedbackCard(
     isCorrect: Boolean,
     correctAnswer: String
 ) {
+    val container = if (isCorrect) {
+        androidx.compose.ui.graphics.Color(0xFFD3F1E2)
+    } else {
+        MaterialTheme.colorScheme.errorContainer
+    }
+    val accent = if (isCorrect) {
+        androidx.compose.ui.graphics.Color(0xFF1F9D6F)
+    } else {
+        MaterialTheme.colorScheme.error
+    }
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (isCorrect) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-        } else {
-            MaterialTheme.colorScheme.errorContainer
-        },
+        shape = RoundedCornerShape(20.dp),
+        color = container,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = if (isCorrect) "Correct" else "Review this one",
                 style = MaterialTheme.typography.titleLarge,
-                color = if (isCorrect) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onErrorContainer
-                }
+                fontWeight = FontWeight.SemiBold,
+                color = accent
             )
             Text(
                 text = correctAnswer,
@@ -373,33 +399,13 @@ private fun EmptyPracticeState(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_school),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "No practice deck yet",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Save a few words or phrases from an article first.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        EmptyState(
+            iconRes = R.drawable.ic_school,
+            title = "No practice deck yet",
+            body = "Save a few words or phrases from an article and they'll appear here as flashcards.",
+            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+            iconTint = MaterialTheme.colorScheme.onTertiaryContainer
+        )
     }
 }
 
@@ -411,53 +417,63 @@ private fun PracticeCompleteState(
     onOpenSavedWords: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val percent = if (answered == 0) 0 else (correct * 100) / answered
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp,
-            shadowElevation = 1.dp,
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_school),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Practice complete",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "$correct/$answered correct",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Button(
-                    onClick = onRestart,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Practice Again")
+                    Pill(
+                        text = "Session complete",
+                        container = MaterialTheme.colorScheme.tertiaryContainer,
+                        content = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "$percent%",
+                        style = MaterialTheme.typography.displayLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "$correct correct out of $answered",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    )
                 }
-                OutlinedButton(
-                    onClick = onOpenSavedWords,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Review Saved Words")
-                }
+            }
+            Button(
+                onClick = onRestart,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Text(
+                    "Practice Again",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            OutlinedButton(
+                onClick = onOpenSavedWords,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Text(
+                    "Review saved words",
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         }
     }

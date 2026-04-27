@@ -119,9 +119,10 @@ fun ArticleViewerScreen(
                 progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp),
+                    .height(3.dp),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                trackColor = MaterialTheme.colorScheme.surfaceContainer,
+                drawStopIndicator = {}
             )
 
             LazyColumn(
@@ -182,14 +183,15 @@ fun ArticleViewerScreen(
 
 @Composable
 private fun ArticleHeading(text: String) {
+    val accent = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .widthIn(max = 680.dp)
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 24.dp, vertical = 4.dp)
             .drawBehind {
                 drawLine(
-                    color = Color(0xFF6650A4),
+                    color = accent,
                     start = Offset(-12.dp.toPx(), 0f),
                     end = Offset(-12.dp.toPx(), size.height),
                     strokeWidth = 3.dp.toPx(),
@@ -199,9 +201,8 @@ private fun ArticleHeading(text: String) {
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -225,7 +226,7 @@ private fun InteractiveParagraph(
         lookedUpWords = lookedUpSnapshot,
         normalColor = MaterialTheme.colorScheme.onSurface,
         lookedUpColor = MaterialTheme.colorScheme.primary,
-        phraseColor = Color(0xFF7C6FE8)
+        phraseColor = MaterialTheme.colorScheme.tertiary
     )
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
@@ -244,6 +245,16 @@ private fun InteractiveParagraph(
         )
     }
 
+    val baseStyle = MaterialTheme.typography.bodyLarge
+    val style = if (isFirstBodyParagraph) {
+        baseStyle.copy(
+            fontSize = androidx.compose.ui.unit.TextUnit(21f, androidx.compose.ui.unit.TextUnitType.Sp),
+            lineHeight = androidx.compose.ui.unit.TextUnit(33f, androidx.compose.ui.unit.TextUnitType.Sp)
+        )
+    } else {
+        baseStyle
+    }
+
     Text(
         text = renderContent.text,
         modifier = Modifier
@@ -256,11 +267,7 @@ private fun InteractiveParagraph(
                     onLongPress = { position -> openMeaning(position, showSentence = true) }
                 )
             },
-        style = if (isFirstBodyParagraph) {
-            MaterialTheme.typography.bodyLarge.copy(fontSize = MaterialTheme.typography.bodyLarge.fontSize)
-        } else {
-            MaterialTheme.typography.bodyLarge
-        },
+        style = style,
         fontStyle = if (isQuote) FontStyle.Italic else FontStyle.Normal,
         color = MaterialTheme.colorScheme.onSurface,
         onTextLayout = { textLayoutResult = it }
@@ -289,12 +296,16 @@ private fun buildParagraphRenderContent(
                     else -> normalColor
                 }
 
+                val isLookedUp = lookupText.lowercase() in lookedUpWords
                 withStyle(
                     SpanStyle(
                         color = color,
-                        textDecoration = TextDecoration.Underline,
-                        fontWeight = if (lookupText.lowercase() in lookedUpWords) {
-                            FontWeight.Medium
+                        textDecoration = when {
+                            group.isPhrase -> TextDecoration.Underline
+                            else -> TextDecoration.None
+                        },
+                        fontWeight = if (isLookedUp || group.isPhrase) {
+                            FontWeight.SemiBold
                         } else {
                             FontWeight.Normal
                         }

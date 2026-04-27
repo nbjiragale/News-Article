@@ -8,7 +8,8 @@ data class CleanArticleResult(
     val author: String,
     val publishedDate: String,
     val cleanArticle: String,
-    val idiomaticPhrases: List<String> = emptyList()
+    val idiomaticPhrases: List<String> = emptyList(),
+    val summary: ArticleSummary? = null
 ) {
     fun contextForMeaning(): String {
         return listOf(title, subtitle, author, publishedDate, cleanArticle)

@@ -52,17 +52,21 @@ import com.niranjan.englisharticle.domain.toMeaningTokenGroups
 import com.niranjan.englisharticle.domain.toWordTokens
 import com.niranjan.englisharticle.ui.components.ArticleHeader
 import com.niranjan.englisharticle.ui.components.ArticleHeroImage
+import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.state.SelectedWord
 
 @Composable
 fun ArticleViewerScreen(
     article: CleanArticleResult,
+    isSummarizing: Boolean,
     onBackToInput: () -> Unit,
     onOpenRecents: () -> Unit,
     onOpenSavedWords: () -> Unit,
     onOpenPractice: () -> Unit,
     onWordTap: (SelectedWord) -> Unit,
+    onSpeakEnglish: (String) -> Unit,
+    onSpeakKannada: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val articleBody = article.cleanArticle
@@ -141,6 +145,12 @@ fun ArticleViewerScreen(
                     ) {
                         ArticleHeroImage()
                         ArticleHeader(article)
+                        ArticleSummaryCard(
+                            summary = article.summary,
+                            isLoading = isSummarizing,
+                            onSpeakEnglish = onSpeakEnglish,
+                            onSpeakKannada = onSpeakKannada
+                        )
                     }
                 }
 

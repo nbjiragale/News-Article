@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RecentArticleEntity::class,
         SavedWordEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class EnglishArticleDatabase : RoomDatabase() {
@@ -61,6 +61,15 @@ abstract class EnglishArticleDatabase : RoomDatabase() {
             }
         }
 
+        private val migration3To4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE recent_articles ADD COLUMN summaryWhatHappenedEnglish TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE recent_articles ADD COLUMN summaryWhatHappenedKannada TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE recent_articles ADD COLUMN summaryGistEnglish TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE recent_articles ADD COLUMN summaryGistKannada TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): EnglishArticleDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -68,7 +77,7 @@ abstract class EnglishArticleDatabase : RoomDatabase() {
                     EnglishArticleDatabase::class.java,
                     "english_article.db"
                 )
-                    .addMigrations(migration1To2, migration2To3)
+                    .addMigrations(migration1To2, migration2To3, migration3To4)
                     .build()
                     .also { instance = it }
             }

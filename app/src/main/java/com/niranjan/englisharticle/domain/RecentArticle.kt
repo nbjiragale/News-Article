@@ -8,6 +8,7 @@ data class RecentArticle(
     val publishedDate: String,
     val cleanArticle: String,
     val idiomaticPhrases: List<String>,
+    val summary: ArticleSummary?,
     val savedAtMillis: Long
 ) {
     fun toCleanArticleResult(): CleanArticleResult {
@@ -17,7 +18,8 @@ data class RecentArticle(
             author = author,
             publishedDate = publishedDate,
             cleanArticle = cleanArticle,
-            idiomaticPhrases = idiomaticPhrases
+            idiomaticPhrases = idiomaticPhrases,
+            summary = summary
         )
     }
 }

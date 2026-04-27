@@ -155,6 +155,11 @@ Return JSON:
 
 - Store in `local.properties`
 - Do NOT hardcode in code
+- Keys used:
+  - `openrouter.api.key` — OpenRouter (article cleaning, summary, word meaning)
+  - `openrouter.model` — optional override; defaults to `google/gemini-2.5-flash`
+  - `deepgram.api.key` — Deepgram Aura TTS for high-quality English article narration. Without this key the app silently falls back to the on-device Android TTS.
+  - `deepgram.voice` — optional voice override; defaults to `aura-asteria-en`
 
 ---
 

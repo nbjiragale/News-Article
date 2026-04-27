@@ -52,6 +52,7 @@ import com.niranjan.englisharticle.domain.isLikelyHeading
 import com.niranjan.englisharticle.domain.toMeaningTokenGroups
 import com.niranjan.englisharticle.domain.toWordTokens
 import com.niranjan.englisharticle.ui.components.ArticleHeader
+import com.niranjan.englisharticle.ui.components.ArticleListenButton
 import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.state.SelectedWord
@@ -69,6 +70,8 @@ fun ArticleViewerScreen(
     onRequestContext: () -> Unit,
     onSpeakEnglish: (String) -> Unit,
     onSpeakKannada: (String) -> Unit,
+    isListening: Boolean,
+    onToggleListen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val articleBody = remember(article.cleanArticle) { article.cleanArticle.ensureParagraphs() }
@@ -146,6 +149,10 @@ fun ArticleViewerScreen(
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         ArticleHeader(article)
+                        ArticleListenButton(
+                            isListening = isListening,
+                            onToggle = onToggleListen
+                        )
                         ArticleSummaryCard(
                             summary = article.summary,
                             isLoading = isSummarizing,

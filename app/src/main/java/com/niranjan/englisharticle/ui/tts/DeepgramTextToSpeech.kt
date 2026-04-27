@@ -27,7 +27,8 @@ import java.security.MessageDigest
 class DeepgramTextToSpeech(
     context: Context,
     private val apiKey: String,
-    private val voice: String
+    private val voice: String,
+    private val audioOffsetMs: Int = 0
 ) {
     private val appContext = context.applicationContext
     private val cacheDir: File = File(appContext.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
@@ -131,13 +132,34 @@ class DeepgramTextToSpeech(
 
         val cachedStarts = if (timingsFile.exists()) loadTimings(timingsFile, plan.sourceWords.size) else null
         if (cachedStarts != null) {
+            Log.i(
+                TAG,
+                "Timings cache HIT (chunk=${plan.text.take(40).replace('\n', ' ')}\u2026 words=${plan.sourceWords.size})"
+            )
             return@withContext SynthesizedChunk(mp3File, cachedStarts)
         }
 
         // Cache miss — try Deepgram STT for accurate per-word timing.
+        Log.i(
+            TAG,
+            "Timings cache MISS, calling STT (chunk=${plan.text.take(40).replace('\n', ' ')}\u2026 words=${plan.sourceWords.size} mp3=${mp3File.length()}B)"
+        )
         val realStarts = try {
             val sttWords = fetchSttWordTimings(mp3File)
-            alignSttWithSource(plan.sourceWords, sttWords)
+            Log.i(TAG, "STT returned ${sttWords.size} words for ${plan.sourceWords.size} source words")
+            val (aligned, matchedCount) = alignSttWithSourceVerbose(plan.sourceWords, sttWords)
+            if (aligned == null) {
+                Log.w(
+                    TAG,
+                    "Alignment fell below quality threshold (matched=$matchedCount/${plan.sourceWords.size}); using estimated timings"
+                )
+            } else {
+                Log.i(
+                    TAG,
+                    "Alignment OK (matched=$matchedCount/${plan.sourceWords.size}, ratio=${(matchedCount * 100) / plan.sourceWords.size.coerceAtLeast(1)}%)"
+                )
+            }
+            aligned
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
@@ -243,7 +265,12 @@ class DeepgramTextToSpeech(
             mediaPlayer.setDataSource(chunk.file.absolutePath)
             mediaPlayer.prepare()
             val durationMs = mediaPlayer.duration.coerceAtLeast(1)
-            val starts = chunk.realStartsMs ?: plan.estimatedWordStartsForDuration(durationMs)
+            val rawStarts = chunk.realStartsMs ?: plan.estimatedWordStartsForDuration(durationMs)
+            val starts = applyAudioOffset(rawStarts, audioOffsetMs)
+            Log.i(
+                TAG,
+                "Playing chunk (real=${chunk.realStartsMs != null} duration=${durationMs}ms words=${starts.size} offset=${audioOffsetMs}ms)"
+            )
             val wordTimings = WordTimings(starts)
 
             val tracker = scope.launch {
@@ -351,7 +378,9 @@ class DeepgramTextToSpeech(
         private const val READ_TIMEOUT_MS = 60_000
         private const val WORD_TICK_MS = 40L
         private const val STT_MODEL = "nova-3"
-        private const val TIMINGS_FORMAT_VERSION = 1
+
+        // Bumped when the alignment algorithm changes so older cached timings are recomputed.
+        private const val TIMINGS_FORMAT_VERSION = 2
     }
 }
 
@@ -479,10 +508,19 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
 internal fun alignSttWithSource(
     sourceWords: List<String>,
     sttWords: List<SttWord>
-): IntArray? {
+): IntArray? = alignSttWithSourceVerbose(sourceWords, sttWords).first
+
+/**
+ * Same as [alignSttWithSource] but also returns the count of source words that were matched
+ * directly to an STT word (vs. being interpolated from neighbors). Useful for diagnostics.
+ */
+internal fun alignSttWithSourceVerbose(
+    sourceWords: List<String>,
+    sttWords: List<SttWord>
+): Pair<IntArray?, Int> {
     val n = sourceWords.size
-    if (n == 0) return IntArray(0)
-    if (sttWords.isEmpty()) return null
+    if (n == 0) return IntArray(0) to 0
+    if (sttWords.isEmpty()) return null to 0
 
     val starts = IntArray(n) { -1 }
     var sttIdx = 0
@@ -513,11 +551,18 @@ internal fun alignSttWithSource(
 
     val matchedCount = starts.count { it >= 0 }
     // If fewer than half of the source words could be aligned, the STT output is likely off.
-    if (matchedCount < (n + 1) / 2) return null
+    if (matchedCount < (n + 1) / 2) return null to matchedCount
 
     fillAlignmentGaps(starts, sttWords)
     enforceMonotonic(starts)
-    return starts
+    return starts to matchedCount
+}
+
+internal fun applyAudioOffset(starts: IntArray, offsetMs: Int): IntArray {
+    if (offsetMs == 0) return starts
+    val out = IntArray(starts.size)
+    for (i in starts.indices) out[i] = (starts[i] + offsetMs).coerceAtLeast(0)
+    return out
 }
 
 private fun normalizeForAlignment(word: String): String =
@@ -581,7 +626,9 @@ internal fun parseSttWords(jsonText: String): List<SttWord> {
     return list
 }
 
-private const val ALIGNMENT_LOOKAHEAD = 4
+// Wide enough to absorb cases where Deepgram STT spells numbers / abbreviations as multiple
+// tokens (e.g. "2024" → "twenty twenty four") without losing alignment for the next source word.
+private const val ALIGNMENT_LOOKAHEAD = 8
 
 private val SENTENCE_SPLIT_REGEX = Regex("(?<=[.!?])\\s+")
 private val WORD_REGEX = Regex("\\S+")

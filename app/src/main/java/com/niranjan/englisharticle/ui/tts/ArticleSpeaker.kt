@@ -15,13 +15,15 @@ enum class ArticlePlaybackState { Idle, Playing, Paused }
 class ArticleSpeaker(
     context: Context,
     deepgramApiKey: String = BuildConfig.DEEPGRAM_API_KEY,
-    deepgramVoice: String = BuildConfig.DEEPGRAM_VOICE
+    deepgramVoice: String = BuildConfig.DEEPGRAM_VOICE,
+    deepgramAudioOffsetMs: Int = BuildConfig.DEEPGRAM_AUDIO_OFFSET_MS
 ) {
     private val systemTts = ArticleTextToSpeech(context)
     private val deepgram = DeepgramTextToSpeech(
         context = context,
         apiKey = deepgramApiKey,
-        voice = deepgramVoice
+        voice = deepgramVoice,
+        audioOffsetMs = deepgramAudioOffsetMs
     )
 
     private val _playbackState = mutableStateOf(ArticlePlaybackState.Idle)

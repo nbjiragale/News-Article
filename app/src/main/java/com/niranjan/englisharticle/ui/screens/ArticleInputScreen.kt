@@ -54,7 +54,6 @@ fun ArticleInputScreen(
     onOpenRecents: () -> Unit,
     onOpenSavedWords: () -> Unit,
     onOpenPractice: () -> Unit,
-    onOpenNews: () -> Unit = {},
     youTubeUrl: String = "",
     onYouTubeUrlChange: (String) -> Unit = {},
     onImportYouTube: () -> Unit = {},
@@ -86,8 +85,7 @@ fun ArticleInputScreen(
             QuickActionRow(
                 onOpenRecents = onOpenRecents,
                 onOpenSavedWords = onOpenSavedWords,
-                onOpenPractice = onOpenPractice,
-                onOpenNews = onOpenNews
+                onOpenPractice = onOpenPractice
             )
 
             YouTubeImportCard(
@@ -278,42 +276,33 @@ private fun HeroIntro() {
 private fun QuickActionRow(
     onOpenRecents: () -> Unit,
     onOpenSavedWords: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenNews: () -> Unit
+    onOpenPractice: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         QuickActionTile(
-            iconRes = R.drawable.ic_globe,
-            label = "News",
-            container = MaterialTheme.colorScheme.primaryContainer,
-            content = MaterialTheme.colorScheme.onPrimaryContainer,
-            onClick = onOpenNews,
-            modifier = Modifier.weight(1f)
-        )
-        QuickActionTile(
             iconRes = R.drawable.ic_history,
             label = "Recent",
-            container = MaterialTheme.colorScheme.secondaryContainer,
-            content = MaterialTheme.colorScheme.onSecondaryContainer,
+            container = MaterialTheme.colorScheme.primaryContainer,
+            content = MaterialTheme.colorScheme.onPrimaryContainer,
             onClick = onOpenRecents,
             modifier = Modifier.weight(1f)
         )
         QuickActionTile(
             iconRes = R.drawable.ic_bookmark,
             label = "Saved",
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            content = MaterialTheme.colorScheme.onTertiaryContainer,
+            container = MaterialTheme.colorScheme.secondaryContainer,
+            content = MaterialTheme.colorScheme.onSecondaryContainer,
             onClick = onOpenSavedWords,
             modifier = Modifier.weight(1f)
         )
         QuickActionTile(
             iconRes = R.drawable.ic_school,
             label = "Practice",
-            container = MaterialTheme.colorScheme.surfaceContainerHigh,
-            content = MaterialTheme.colorScheme.onSurface,
+            container = MaterialTheme.colorScheme.tertiaryContainer,
+            content = MaterialTheme.colorScheme.onTertiaryContainer,
             onClick = onOpenPractice,
             modifier = Modifier.weight(1f)
         )
@@ -466,7 +455,6 @@ private fun ArticleInputPreview() {
             onOpenRecents = {},
             onOpenSavedWords = {},
             onOpenPractice = {},
-            onOpenNews = {},
             youTubeUrl = "",
             onYouTubeUrlChange = {},
             onImportYouTube = {},

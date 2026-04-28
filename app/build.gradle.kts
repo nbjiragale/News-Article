@@ -53,6 +53,11 @@ android {
             "DEEPGRAM_AUDIO_OFFSET_MS",
             (localProperties.getProperty("deepgram.audio.offset.ms") ?: "0")
         )
+        buildConfigField(
+            "String",
+            "NEWS_API_KEY",
+            (localProperties.getProperty("newsapi.key") ?: "").asBuildConfigString()
+        )
     }
 
     buildTypes {
@@ -89,6 +94,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.coil.compose)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

@@ -3,7 +3,7 @@ package com.niranjan.englisharticle.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.niranjan.englisharticle.data.NewsApiService
+import com.niranjan.englisharticle.data.GNewsApiService
 import com.niranjan.englisharticle.domain.NewsArticle
 import com.niranjan.englisharticle.domain.NewsCategory
 import kotlinx.coroutines.CancellationException
@@ -24,7 +24,7 @@ data class NewsUiState(
 )
 
 class NewsViewModel(
-    private val newsApiService: NewsApiService
+    private val newsApiService: GNewsApiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NewsUiState())
@@ -105,7 +105,7 @@ class NewsViewModel(
 }
 
 class NewsViewModelFactory(
-    private val newsApiService: NewsApiService
+    private val newsApiService: GNewsApiService
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

@@ -14,10 +14,12 @@ data class NewsArticle(
 
 enum class NewsCategory(val apiValue: String, val label: String) {
     General("general", "General"),
+    World("world", "World"),
+    Nation("nation", "Nation"),
     Business("business", "Business"),
     Technology("technology", "Technology"),
-    Science("science", "Science"),
-    Health("health", "Health"),
+    Entertainment("entertainment", "Entertainment"),
     Sports("sports", "Sports"),
-    Entertainment("entertainment", "Entertainment")
+    Science("science", "Science"),
+    Health("health", "Health")
 }

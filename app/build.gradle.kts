@@ -55,8 +55,8 @@ android {
         )
         buildConfigField(
             "String",
-            "NEWS_API_KEY",
-            (localProperties.getProperty("newsapi.key") ?: "").asBuildConfigString()
+            "GNEWS_API_KEY",
+            (localProperties.getProperty("gnews.key") ?: "").asBuildConfigString()
         )
     }
 

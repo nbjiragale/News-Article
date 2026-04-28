@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.data.ArticleLocalStore
+import com.niranjan.englisharticle.data.NewsApiService
 import com.niranjan.englisharticle.data.OpenRouterArticleService
 import com.niranjan.englisharticle.data.local.EnglishArticleDatabase
 import com.niranjan.englisharticle.data.local.RoomArticleLocalStore
@@ -31,6 +32,7 @@ import com.niranjan.englisharticle.domain.createSavedWordKey
 import com.niranjan.englisharticle.ui.components.BottomSheetHandle
 import com.niranjan.englisharticle.ui.screens.ArticleInputScreen
 import com.niranjan.englisharticle.ui.screens.ArticleViewerScreen
+import com.niranjan.englisharticle.ui.screens.BrowseNewsScreen
 import com.niranjan.englisharticle.ui.screens.MeaningSheet
 import com.niranjan.englisharticle.ui.screens.PracticeScreen
 import com.niranjan.englisharticle.ui.screens.RecentArticlesScreen
@@ -104,7 +106,56 @@ fun EnglishLearningApp(
                     onClearArticle = viewModel::clearArticleText,
                     onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
                     onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
-                    onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) }
+                    onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
+                    onOpenNews = { navController.navigateSingleTop(AppRoute.News) }
+                )
+            }
+
+            composable(AppRoute.News) {
+                val newsApiService = rememberNewsApiService()
+                val newsVm: NewsViewModel = viewModel(
+                    factory = remember(newsApiService) {
+                        NewsViewModelFactory(newsApiService)
+                    }
+                )
+                val newsState by newsVm.uiState.collectAsState()
+                BrowseNewsScreen(
+                    articles = newsState.articles,
+                    isLoading = newsState.isLoading,
+                    error = newsState.error,
+                    searchQuery = newsState.searchQuery,
+                    selectedCategory = newsState.selectedCategory,
+                    onSearchQueryChange = newsVm::updateSearchQuery,
+                    onSearch = newsVm::search,
+                    onCategorySelected = newsVm::selectCategory,
+                    onArticleClick = { newsArticle ->
+                        val articleText = buildString {
+                            appendLine(newsArticle.title)
+                            if (!newsArticle.description.isNullOrBlank()) {
+                                appendLine()
+                                appendLine(newsArticle.description)
+                            }
+                            if (!newsArticle.content.isNullOrBlank()) {
+                                appendLine()
+                                appendLine(newsArticle.content)
+                            }
+                            appendLine()
+                            appendLine("Source: ${newsArticle.sourceName}")
+                            if (!newsArticle.author.isNullOrBlank()) {
+                                appendLine("Author: ${newsArticle.author}")
+                            }
+                            appendLine("Published: ${newsArticle.publishedAt}")
+                            appendLine("URL: ${newsArticle.url}")
+                        }
+                        viewModel.updateDraftArticle(articleText)
+                        viewModel.cleanDraftArticle()
+                        navController.navigate(AppRoute.Input) {
+                            popUpTo(AppRoute.Input) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onRetry = newsVm::retry,
+                    onBack = { navigateBack() }
                 )
             }
 
@@ -121,7 +172,8 @@ fun EnglishLearningApp(
                         onClearArticle = viewModel::clearArticleText,
                         onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
                         onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
-                        onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) }
+                        onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
+                        onOpenNews = { navController.navigateSingleTop(AppRoute.News) }
                     )
                 } else {
                     val playbackState by textToSpeech.playbackState
@@ -260,12 +312,20 @@ private fun rememberDefaultLocalStore(): ArticleLocalStore {
     }
 }
 
+@Composable
+private fun rememberNewsApiService(): NewsApiService {
+    return remember {
+        NewsApiService(apiKey = BuildConfig.NEWS_API_KEY)
+    }
+}
+
 private object AppRoute {
     const val Input = "input"
     const val Reader = "reader"
     const val Recents = "recents"
     const val SavedWords = "saved_words"
     const val Practice = "practice"
+    const val News = "news"
 }
 
 private fun NavHostController.navigateSingleTop(route: String) {

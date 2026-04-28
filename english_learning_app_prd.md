@@ -160,6 +160,7 @@ Return JSON:
   - `openrouter.model` — optional override; defaults to `google/gemini-2.5-flash`
   - `deepgram.api.key` — Deepgram Aura TTS for high-quality English article narration. Without this key the app silently falls back to the on-device Android TTS.
   - `deepgram.voice` — optional voice override; defaults to `aura-asteria-en`
+  - `newsapi.key` — News API key for browsing top headlines and searching articles. Get one free at https://newsapi.org/register. Without this key the "News" tab will show an error when fetching articles.
 
 ---
 

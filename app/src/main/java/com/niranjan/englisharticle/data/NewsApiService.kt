@@ -25,7 +25,6 @@ class NewsApiService(private val apiKey: String) {
             append("&category=${category.apiValue}")
             append("&page=$page")
             append("&pageSize=$pageSize")
-            append("&apiKey=$apiKey")
         }
         fetchArticles(url)
     }
@@ -45,16 +44,27 @@ class NewsApiService(private val apiKey: String) {
             append("&sortBy=$sortBy")
             append("&page=$page")
             append("&pageSize=$pageSize")
-            append("&apiKey=$apiKey")
         }
         fetchArticles(url)
     }
 
     private fun fetchArticles(urlString: String): List<NewsArticle> {
+        if (apiKey.isBlank()) {
+            error(
+                "News API key is missing. Add 'newsapi.key=YOUR_KEY' to local.properties " +
+                    "(get a free key at https://newsapi.org/register)."
+            )
+        }
         val connection = URL(urlString).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 15_000
         connection.readTimeout = 15_000
+        // NewsAPI is fronted by Cloudflare which 403s requests with the default
+        // Java/Android User-Agent. Set an explicit UA and pass the API key via
+        // the recommended X-Api-Key header instead of a query parameter.
+        connection.setRequestProperty("User-Agent", USER_AGENT)
+        connection.setRequestProperty("X-Api-Key", apiKey)
+        connection.setRequestProperty("Accept", "application/json")
 
         try {
             val code = connection.responseCode
@@ -63,16 +73,30 @@ class NewsApiService(private val apiKey: String) {
             } else {
                 connection.errorStream
             }
-            val body = BufferedReader(InputStreamReader(stream)).use { it.readText() }
+            val body = stream?.let {
+                BufferedReader(InputStreamReader(it)).use { reader -> reader.readText() }
+            } ?: ""
             if (code !in 200..299) {
                 val errorJson = runCatching { JSONObject(body) }.getOrNull()
-                val message = errorJson?.optString("message") ?: "HTTP $code"
-                error("News API error: $message")
+                val apiMessage = errorJson?.optString("message")?.takeIf { it.isNotBlank() }
+                val message = apiMessage ?: friendlyErrorFor(code)
+                error("News API error ($code): $message")
             }
             return parseArticles(body)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun friendlyErrorFor(code: Int): String = when (code) {
+        401 -> "API key is invalid or missing. Check newsapi.key in local.properties."
+        403 -> "Request was blocked (HTTP 403). This usually means the API key is " +
+            "invalid, disabled, or the free Developer plan is being used outside of " +
+            "a development environment. Verify your key at https://newsapi.org/account."
+        426 -> "NewsAPI free Developer plan is restricted to local development. " +
+            "Upgrade your plan or run a debug build."
+        429 -> "Rate limit reached for your NewsAPI plan. Try again later."
+        else -> "HTTP $code"
     }
 
     private fun parseArticles(json: String): List<NewsArticle> {
@@ -99,5 +123,6 @@ class NewsApiService(private val apiKey: String) {
 
     companion object {
         private const val BASE_URL = "https://newsapi.org/v2"
+        private const val USER_AGENT = "EnglishArticleApp/1.0 (Android)"
     }
 }

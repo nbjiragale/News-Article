@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.niranjan.englisharticle.data.ArticleLocalStore
+import com.niranjan.englisharticle.data.JinaReaderService
 import com.niranjan.englisharticle.domain.ArticleAiService
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
+import com.niranjan.englisharticle.domain.NewsArticle
 import com.niranjan.englisharticle.domain.RecentArticle
 import com.niranjan.englisharticle.domain.SavedWord
 import com.niranjan.englisharticle.ui.state.MeaningUiState
@@ -44,7 +46,8 @@ sealed interface EnglishNavigationEvent {
 
 class EnglishLearningViewModel(
     private val articleService: ArticleAiService,
-    private val localStore: ArticleLocalStore
+    private val localStore: ArticleLocalStore,
+    private val readerService: JinaReaderService
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EnglishLearningUiState())
     val uiState: StateFlow<EnglishLearningUiState> = _uiState.asStateFlow()
@@ -76,6 +79,70 @@ class EnglishLearningViewModel(
     fun cleanDraftArticle() {
         cleanRawArticle(uiState.value.draftArticle)
     }
+
+    fun openNewsArticle(article: NewsArticle) {
+        articleCleaningJob?.cancel()
+        meaningLookupJob?.cancel()
+        summaryJob?.cancel()
+
+        val placeholder = buildPlaceholderText(article)
+        _uiState.update {
+            it.copy(
+                draftArticle = placeholder,
+                rawArticleForRetry = placeholder,
+                isCleaningArticle = true,
+                cleaningError = null,
+                selected = null,
+                meaningState = MeaningUiState.Idle
+            )
+        }
+
+        articleCleaningJob = viewModelScope.launch {
+            val readableText = try {
+                readerService.fetchReadableText(article.url)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        cleaningError = error.message
+                            ?: "Could not download the full article. Try again or open another story.",
+                        isCleaningArticle = false
+                    )
+                }
+                return@launch
+            }
+
+            val rawArticle = buildString {
+                appendLine(article.title)
+                appendLine()
+                if (!article.description.isNullOrBlank()) {
+                    appendLine(article.description)
+                    appendLine()
+                }
+                appendLine(readableText)
+                appendLine()
+                if (article.sourceName.isNotBlank()) {
+                    appendLine("Source: ${article.sourceName}")
+                }
+                if (article.publishedAt.isNotBlank()) {
+                    appendLine("Published: ${article.publishedAt}")
+                }
+                appendLine("URL: ${article.url}")
+            }.trim()
+
+            _uiState.update { it.copy(rawArticleForRetry = rawArticle) }
+            performCleaning(rawArticle)
+        }
+    }
+
+    private fun buildPlaceholderText(article: NewsArticle): String = buildString {
+        appendLine(article.title)
+        if (!article.description.isNullOrBlank()) {
+            appendLine()
+            appendLine(article.description)
+        }
+    }.trim()
 
     fun retryCleanArticle() {
         val currentState = uiState.value
@@ -312,77 +379,82 @@ class EnglishLearningViewModel(
         }
 
         articleCleaningJob = viewModelScope.launch {
-            val result = try {
-                articleService.cleanArticle(rawArticle)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                _uiState.update {
-                    it.copy(
-                        cleaningError = error.message ?: "Could not clean article.",
-                        isCleaningArticle = false
-                    )
-                }
-                return@launch
-            }
+            performCleaning(rawArticle)
+        }
+    }
 
-            val displayResult = withContext(Dispatchers.Default) {
-                result.withLocalArticleFallback(rawArticle)
-            }
-            if (displayResult.cleanArticle.isBlank()) {
-                _uiState.update {
-                    it.copy(
-                        cleaningError = "The article cleaner returned empty content.",
-                        isCleaningArticle = false
-                    )
-                }
-                return@launch
-            }
-
+    private suspend fun performCleaning(rawArticle: String) {
+        val result = try {
+            articleService.cleanArticle(rawArticle)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
             _uiState.update {
                 it.copy(
-                    cleanedArticle = displayResult,
+                    cleaningError = error.message ?: "Could not clean article.",
                     isCleaningArticle = false
                 )
             }
-            _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
+            return
+        }
 
-            val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                emptyList()
+        val displayResult = withContext(Dispatchers.Default) {
+            result.withLocalArticleFallback(rawArticle)
+        }
+        if (displayResult.cleanArticle.isBlank()) {
+            _uiState.update {
+                it.copy(
+                    cleaningError = "The article cleaner returned empty content.",
+                    isCleaningArticle = false
+                )
             }
-            val articleToSave = if (detectedPhrases.isEmpty()) {
-                displayResult
-            } else {
-                displayResult.copy(idiomaticPhrases = detectedPhrases)
-            }
+            return
+        }
 
-            if (detectedPhrases.isNotEmpty()) {
-                _uiState.update { current ->
-                    if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
-                        current.copy(cleanedArticle = articleToSave)
-                    } else {
-                        current
-                    }
+        _uiState.update {
+            it.copy(
+                cleanedArticle = displayResult,
+                isCleaningArticle = false
+            )
+        }
+        _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
+
+        val detectedPhrases = try {
+            articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        val articleToSave = if (detectedPhrases.isEmpty()) {
+            displayResult
+        } else {
+            displayResult.copy(idiomaticPhrases = detectedPhrases)
+        }
+
+        if (detectedPhrases.isNotEmpty()) {
+            _uiState.update { current ->
+                if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
+                    current.copy(cleanedArticle = articleToSave)
+                } else {
+                    current
                 }
             }
-
-            runCatching { localStore.saveRecentArticle(articleToSave) }
         }
+
+        runCatching { localStore.saveRecentArticle(articleToSave) }
     }
 }
 
 class EnglishLearningViewModelFactory(
     private val articleService: ArticleAiService,
-    private val localStore: ArticleLocalStore
+    private val localStore: ArticleLocalStore,
+    private val readerService: JinaReaderService
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(EnglishLearningViewModel::class.java)) {
-            return EnglishLearningViewModel(articleService, localStore) as T
+            return EnglishLearningViewModel(articleService, localStore, readerService) as T
         }
         error("Unknown ViewModel class: ${modelClass.name}")
     }

@@ -23,7 +23,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.data.ArticleLocalStore
-import com.niranjan.englisharticle.data.NewsApiService
+import com.niranjan.englisharticle.data.GNewsApiService
+import com.niranjan.englisharticle.data.JinaReaderService
 import com.niranjan.englisharticle.data.OpenRouterArticleService
 import com.niranjan.englisharticle.data.local.EnglishArticleDatabase
 import com.niranjan.englisharticle.data.local.RoomArticleLocalStore
@@ -44,16 +45,18 @@ import com.niranjan.englisharticle.ui.tts.rememberArticleSpeaker
 fun EnglishLearningApp(
     articleService: ArticleAiService = rememberDefaultArticleService(),
     localStore: ArticleLocalStore = rememberDefaultLocalStore(),
+    readerService: JinaReaderService = rememberDefaultReaderService(),
     sharedArticleText: SharedArticleText? = null,
     onSharedArticleTextHandled: (Long) -> Unit = {}
 ) {
     val textToSpeech = rememberArticleSpeaker()
     val navController = rememberNavController()
     val viewModel: EnglishLearningViewModel = viewModel(
-        factory = remember(articleService, localStore) {
+        factory = remember(articleService, localStore, readerService) {
             EnglishLearningViewModelFactory(
                 articleService = articleService,
-                localStore = localStore
+                localStore = localStore,
+                readerService = readerService
             )
         }
     )
@@ -129,26 +132,7 @@ fun EnglishLearningApp(
                     onSearch = newsVm::search,
                     onCategorySelected = newsVm::selectCategory,
                     onArticleClick = { newsArticle ->
-                        val articleText = buildString {
-                            appendLine(newsArticle.title)
-                            if (!newsArticle.description.isNullOrBlank()) {
-                                appendLine()
-                                appendLine(newsArticle.description)
-                            }
-                            if (!newsArticle.content.isNullOrBlank()) {
-                                appendLine()
-                                appendLine(newsArticle.content)
-                            }
-                            appendLine()
-                            appendLine("Source: ${newsArticle.sourceName}")
-                            if (!newsArticle.author.isNullOrBlank()) {
-                                appendLine("Author: ${newsArticle.author}")
-                            }
-                            appendLine("Published: ${newsArticle.publishedAt}")
-                            appendLine("URL: ${newsArticle.url}")
-                        }
-                        viewModel.updateDraftArticle(articleText)
-                        viewModel.cleanDraftArticle()
+                        viewModel.openNewsArticle(newsArticle)
                         navController.navigate(AppRoute.Input) {
                             popUpTo(AppRoute.Input) { inclusive = false }
                             launchSingleTop = true
@@ -313,10 +297,15 @@ private fun rememberDefaultLocalStore(): ArticleLocalStore {
 }
 
 @Composable
-private fun rememberNewsApiService(): NewsApiService {
+private fun rememberNewsApiService(): GNewsApiService {
     return remember {
-        NewsApiService(apiKey = BuildConfig.NEWS_API_KEY)
+        GNewsApiService(apiKey = BuildConfig.GNEWS_API_KEY)
     }
+}
+
+@Composable
+private fun rememberDefaultReaderService(): JinaReaderService {
+    return remember { JinaReaderService() }
 }
 
 private object AppRoute {

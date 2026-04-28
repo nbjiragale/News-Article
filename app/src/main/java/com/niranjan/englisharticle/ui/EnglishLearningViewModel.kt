@@ -98,20 +98,38 @@ class EnglishLearningViewModel(
         }
 
         articleCleaningJob = viewModelScope.launch {
-            val readableText = try {
+            val readerResult = try {
                 readerService.fetchReadableText(article.url)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                _uiState.update {
-                    it.copy(
-                        cleaningError = error.message
-                            ?: "Could not download the full article. Try again or open another story.",
-                        isCleaningArticle = false
-                    )
-                }
-                return@launch
+                JinaReaderService.Result.Failure(error.message ?: "Reader request failed.")
             }
+
+            val readableText = when (readerResult) {
+                is JinaReaderService.Result.Success -> readerResult.text
+                is JinaReaderService.Result.Failure -> null
+            }
+            // Fall back to the GNews snippet so the reader still opens
+            // with something meaningful when the publisher blocks scrapers.
+            val fallbackSnippet = listOfNotNull(
+                article.description?.takeIf { it.isNotBlank() },
+                article.content?.takeIf { it.isNotBlank() }
+            ).joinToString(separator = "\n\n")
+
+            val articleBody = readableText
+                ?: fallbackSnippet.takeIf { it.isNotBlank() }
+                ?: run {
+                    val message = (readerResult as? JinaReaderService.Result.Failure)?.message
+                        ?: "Could not download the full article. Try again or open another story."
+                    _uiState.update {
+                        it.copy(
+                            cleaningError = message,
+                            isCleaningArticle = false
+                        )
+                    }
+                    return@launch
+                }
 
             val rawArticle = buildString {
                 appendLine(article.title)
@@ -120,8 +138,15 @@ class EnglishLearningViewModel(
                     appendLine(article.description)
                     appendLine()
                 }
-                appendLine(readableText)
+                appendLine(articleBody)
                 appendLine()
+                if (readableText == null) {
+                    appendLine(
+                        "(Note: the publisher blocked the full-text fetch, so the reader is " +
+                            "working from the headline + GNews snippet only.)"
+                    )
+                    appendLine()
+                }
                 if (article.sourceName.isNotBlank()) {
                     appendLine("Source: ${article.sourceName}")
                 }

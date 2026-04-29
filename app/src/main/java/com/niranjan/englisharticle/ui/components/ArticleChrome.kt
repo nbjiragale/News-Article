@@ -23,8 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -58,19 +56,11 @@ fun AppTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
-                .drawBehind {
-                    drawLine(
-                        color = Color(0xFF14141A).copy(alpha = 0.06f),
-                        start = Offset(0f, size.height),
-                        end = Offset(size.width, size.height),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
+                .height(60.dp)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.width(44.dp), contentAlignment = Alignment.CenterStart) {
+            Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.CenterStart) {
                 if (showBack) {
                     RoundIconButton(
                         iconRes = R.drawable.ic_move_left,
@@ -79,20 +69,22 @@ fun AppTopBar(
                     )
                 }
             }
-            Image(
-                painter = painterResource(R.drawable.arthareader_logo),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-            )
+            if (!showBack) {
+                Image(
+                    painter = painterResource(R.drawable.arthareader_logo),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
             Text(
                 text = stringResource(R.string.app_name),
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp),
-                style = MaterialTheme.typography.titleLarge,
+                    .padding(start = if (showBack) 4.dp else 10.dp),
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -137,14 +129,14 @@ private fun RoundIconButton(
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .size(44.dp)
+            .size(40.dp)
             .clip(CircleShape)
     ) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
-            modifier = Modifier.size(22.dp),
-            tint = MaterialTheme.colorScheme.onSurface
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

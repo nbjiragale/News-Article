@@ -2,83 +2,130 @@ package com.niranjan.englisharticle.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Brand ────────────────────────────────────────────────────────────────────
-// Primary: vibrant indigo. Tertiary: warm coral. Secondary: muted plum.
-// Picked to feel editorial yet "expressive" — bigger, more confident than the
-// previous near-navy palette while keeping a Kannada-friendly literary tone.
+// ── Reading paper palette ────────────────────────────────────────────────────
+// Quiet, warm-leaning neutrals (inspired by editorial readers like Instapaper /
+// Readwise) with a sage-green primary, sepia secondary, and dusty-plum
+// tertiary accent. The whole scheme is tuned for long reading sessions:
+// ample contrast on body text, low contrast on chrome, no harsh saturation.
 
-val BrandIndigo50 = Color(0xFFF1F2FF)
-val BrandIndigo100 = Color(0xFFE0E2FF)
-val BrandIndigo200 = Color(0xFFC2C6FF)
-val BrandIndigo300 = Color(0xFF9CA1FF)
-val BrandIndigo400 = Color(0xFF7479F5)
-val BrandIndigo500 = Color(0xFF4F4DE0)
-val BrandIndigo600 = Color(0xFF3C39C7)
-val BrandIndigo700 = Color(0xFF2C2A99)
-val BrandIndigo800 = Color(0xFF1F1D70)
-val BrandIndigo900 = Color(0xFF15144F)
+// Paper neutrals (background → containers)
+val Paper50 = Color(0xFFFBF8F3)
+val Paper100 = Color(0xFFF6F1E7)
+val Paper200 = Color(0xFFEFE9DB)
+val Paper300 = Color(0xFFE8E1D0)
+val Paper400 = Color(0xFFE1D9C6)
 
-val BrandCoral50 = Color(0xFFFFF1ED)
-val BrandCoral100 = Color(0xFFFFD9CC)
-val BrandCoral300 = Color(0xFFFF9F84)
-val BrandCoral500 = Color(0xFFE56A4C)
-val BrandCoral700 = Color(0xFFA84229)
+// Warm charcoal ink (text + strong chrome)
+val Charcoal900 = Color(0xFF1F1D19)
+val Charcoal800 = Color(0xFF26241F)
+val Charcoal700 = Color(0xFF34302A)
+val Charcoal600 = Color(0xFF4A443B)
+val Charcoal500 = Color(0xFF6E665B)
+val Charcoal400 = Color(0xFF8E8676)
+val Charcoal300 = Color(0xFFA89F8E)
+val Charcoal200 = Color(0xFFDBD3C3)
+val Charcoal100 = Color(0xFFEDE7DB)
 
-val BrandPlum100 = Color(0xFFEDDCEB)
-val BrandPlum300 = Color(0xFFB48AB1)
-val BrandPlum500 = Color(0xFF7E4F7C)
-val BrandPlum700 = Color(0xFF4F2A4D)
+// Sage primary
+val Sage100 = Color(0xFFD9E5D2)
+val Sage300 = Color(0xFF9CC1A0)
+val Sage500 = Color(0xFF4F6E58)
+val Sage700 = Color(0xFF2F4737)
+val Sage900 = Color(0xFF1A2C20)
 
-// ── Neutrals ─────────────────────────────────────────────────────────────────
-val Cream50 = Color(0xFFFBF8F2)
-val Cream100 = Color(0xFFF5F1E8)
-val Cream200 = Color(0xFFEDE8DD)
-val Cream300 = Color(0xFFDFD9CB)
+// Sepia secondary
+val Sepia100 = Color(0xFFEBDDC4)
+val Sepia300 = Color(0xFFD0AE7A)
+val Sepia500 = Color(0xFF8C6B45)
+val Sepia700 = Color(0xFF5A4128)
 
-val Ink900 = Color(0xFF14141A)
-val Ink800 = Color(0xFF1F1F28)
-val Ink700 = Color(0xFF2A2A36)
-val Ink600 = Color(0xFF3D3D4D)
-val Ink500 = Color(0xFF55556B)
-val Ink400 = Color(0xFF7A7A92)
-val Ink300 = Color(0xFFAFAEC2)
-val Ink200 = Color(0xFFD8D6E2)
-val Ink100 = Color(0xFFEDECF3)
+// Plum tertiary
+val Plum100 = Color(0xFFEBDCF2)
+val Plum300 = Color(0xFFB99AC7)
+val Plum500 = Color(0xFF7C5A88)
+val Plum700 = Color(0xFF4D3457)
 
-// ── Semantic ─────────────────────────────────────────────────────────────────
-val SuccessGreen500 = Color(0xFF1F9D6F)
-val SuccessGreen100 = Color(0xFFD3F1E2)
-val WarnAmber500 = Color(0xFFD78B16)
-val WarnAmber100 = Color(0xFFFCEAC2)
-val DangerRed500 = Color(0xFFC83434)
-val DangerRed100 = Color(0xFFFFD9D6)
+// Semantic
+val SuccessGreen500 = Color(0xFF3F7A5C)
+val SuccessGreen100 = Color(0xFFD9ECDF)
+val WarnAmber500 = Color(0xFFB47B1F)
+val WarnAmber100 = Color(0xFFF4E4C2)
+val DangerRed500 = Color(0xFFB14C42)
+val DangerRed100 = Color(0xFFF4DAD4)
 
-// ── Legacy aliases (kept so existing direct references compile) ──────────────
-val AppPrimary = BrandIndigo600
+// ── Backwards-compatible aliases ─────────────────────────────────────────────
+// Existing screens reference these names directly. They now resolve to the
+// new reading-paper tokens so the whole app picks up the redesign without
+// touching every call site.
+
+// Legacy "indigo" → sage primary
+val BrandIndigo50 = Sage100
+val BrandIndigo100 = Sage100
+val BrandIndigo200 = Sage300
+val BrandIndigo300 = Sage300
+val BrandIndigo400 = Sage500
+val BrandIndigo500 = Sage500
+val BrandIndigo600 = Sage500
+val BrandIndigo700 = Sage700
+val BrandIndigo800 = Sage700
+val BrandIndigo900 = Sage900
+
+// Legacy "coral" → sepia secondary accent
+val BrandCoral50 = Sepia100
+val BrandCoral100 = Sepia100
+val BrandCoral300 = Sepia300
+val BrandCoral500 = Sepia500
+val BrandCoral700 = Sepia700
+
+// Legacy "plum" → plum tertiary
+val BrandPlum100 = Plum100
+val BrandPlum300 = Plum300
+val BrandPlum500 = Plum500
+val BrandPlum700 = Plum700
+
+// Legacy cream neutrals → paper neutrals
+val Cream50 = Paper50
+val Cream100 = Paper100
+val Cream200 = Paper200
+val Cream300 = Paper300
+
+// Legacy ink → warm charcoal
+val Ink900 = Charcoal900
+val Ink800 = Charcoal800
+val Ink700 = Charcoal700
+val Ink600 = Charcoal600
+val Ink500 = Charcoal500
+val Ink400 = Charcoal400
+val Ink300 = Charcoal300
+val Ink200 = Charcoal200
+val Ink100 = Charcoal100
+
+// Legacy semantic role aliases
+val AppPrimary = Sage500
 val AppOnPrimary = Color.White
-val AppPrimaryContainer = BrandIndigo100
-val AppOnPrimaryContainer = BrandIndigo900
-val AppSecondary = BrandPlum500
-val AppSecondaryContainer = BrandPlum100
-val AppOnSecondaryContainer = BrandPlum700
-val AppTertiary = BrandCoral500
-val AppSurface = Cream50
-val AppTopBar = Cream100
+val AppPrimaryContainer = Sage100
+val AppOnPrimaryContainer = Sage700
+val AppSecondary = Sepia500
+val AppSecondaryContainer = Sepia100
+val AppOnSecondaryContainer = Sepia700
+val AppTertiary = Plum500
+val AppSurface = Paper50
+val AppTopBar = Paper50
 val AppSurfaceContainerLowest = Color.White
-val AppSurfaceContainerLow = Cream100
-val AppSurfaceContainer = Cream200
-val AppSurfaceContainerHigh = Cream300
-val AppSurfaceVariant = Cream200
-val AppOnSurface = Ink900
-val AppOnSurfaceVariant = Ink500
-val AppOutline = Ink400
-val AppOutlineVariant = Ink200
+val AppSurfaceContainerLow = Paper100
+val AppSurfaceContainer = Paper200
+val AppSurfaceContainerHigh = Paper300
+val AppSurfaceVariant = Paper200
+val AppOnSurface = Charcoal900
+val AppOnSurfaceVariant = Charcoal500
+val AppOutline = Charcoal300
+val AppOutlineVariant = Charcoal200
 val AppError = DangerRed500
 val AppErrorContainer = DangerRed100
-val AppOnErrorContainer = Color(0xFF6B0F0F)
+val AppOnErrorContainer = Color(0xFF5A1610)
 
-val AppDarkBackground = Ink900
-val AppDarkSurface = Ink800
-val AppDarkSurfaceVariant = Ink700
-val AppDarkText = Color(0xFFF2F0F8)
-val AppDarkMuted = Ink300
+val AppDarkBackground = Color(0xFF14130F)
+val AppDarkSurface = Color(0xFF1A1814)
+val AppDarkSurfaceVariant = Color(0xFF26241F)
+val AppDarkText = Color(0xFFEDE7DB)
+val AppDarkMuted = Charcoal300

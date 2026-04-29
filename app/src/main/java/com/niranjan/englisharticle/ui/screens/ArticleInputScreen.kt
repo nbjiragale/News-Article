@@ -68,27 +68,17 @@ fun ArticleInputScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        AppTopBar(
-            showBack = false,
-            onRecentsClick = onOpenRecents,
-            onSavedWordsClick = onOpenSavedWords,
-            onPracticeClick = onOpenPractice
-        )
+        AppTopBar(showBack = false)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 28.dp),
+                .padding(horizontal = 24.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             HeroIntro()
 
-            QuickActionRow(
-                onOpenRecents = onOpenRecents,
-                onOpenSavedWords = onOpenSavedWords,
-                onOpenPractice = onOpenPractice,
-                onOpenNews = onOpenNews
-            )
+            RecentsLink(onOpenRecents = onOpenRecents)
 
             YouTubeImportCard(
                 url = youTubeUrl,
@@ -248,26 +238,15 @@ private fun YouTubeImportCard(
 
 @Composable
 private fun HeroIntro() {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        ) {
-            Text(
-                text = "READ · LOOKUP · LEARN",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-            )
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Read English news,\nlearn in Kannada.",
-            style = MaterialTheme.typography.displaySmall,
+            text = "Read English,\nlearn in Kannada.",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "Paste a full article and tap any word for an instant contextual meaning, definition, and example — saved to your practice deck.",
+            text = "Paste an article or a YouTube link. Tap any word for meaning, definition, and an example you can save.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -275,91 +254,49 @@ private fun HeroIntro() {
 }
 
 @Composable
-private fun QuickActionRow(
-    onOpenRecents: () -> Unit,
-    onOpenSavedWords: () -> Unit,
-    onOpenPractice: () -> Unit,
-    onOpenNews: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        QuickActionTile(
-            iconRes = R.drawable.ic_globe,
-            label = "News",
-            container = MaterialTheme.colorScheme.primaryContainer,
-            content = MaterialTheme.colorScheme.onPrimaryContainer,
-            onClick = onOpenNews,
-            modifier = Modifier.weight(1f)
-        )
-        QuickActionTile(
-            iconRes = R.drawable.ic_history,
-            label = "Recent",
-            container = MaterialTheme.colorScheme.secondaryContainer,
-            content = MaterialTheme.colorScheme.onSecondaryContainer,
-            onClick = onOpenRecents,
-            modifier = Modifier.weight(1f)
-        )
-        QuickActionTile(
-            iconRes = R.drawable.ic_bookmark,
-            label = "Saved",
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            content = MaterialTheme.colorScheme.onTertiaryContainer,
-            onClick = onOpenSavedWords,
-            modifier = Modifier.weight(1f)
-        )
-        QuickActionTile(
-            iconRes = R.drawable.ic_school,
-            label = "Practice",
-            container = MaterialTheme.colorScheme.surfaceContainerHigh,
-            content = MaterialTheme.colorScheme.onSurface,
-            onClick = onOpenPractice,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun QuickActionTile(
-    iconRes: Int,
-    label: String,
-    container: androidx.compose.ui.graphics.Color,
-    content: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun RecentsLink(onOpenRecents: () -> Unit) {
     Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = container,
-        contentColor = content,
-        modifier = modifier.height(86.dp)
+        onClick = onOpenRecents,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
-                    .background(content.copy(alpha = 0.12f)),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painter = painterResource(iconRes),
+                    painter = painterResource(R.drawable.ic_history),
                     contentDescription = null,
-                    tint = content,
-                    modifier = Modifier.size(18.dp)
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Recent articles",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Reopen anything you've read.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+                text = "›",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

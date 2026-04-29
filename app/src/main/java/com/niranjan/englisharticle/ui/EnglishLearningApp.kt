@@ -1,11 +1,19 @@
 package com.niranjan.englisharticle.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -15,12 +23,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.data.ArticleLocalStore
 import com.niranjan.englisharticle.data.NewsApiService
@@ -87,8 +98,30 @@ fun EnglishLearningApp(
         }
     }
 
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            if (currentRoute in BottomNavRoutes) {
+                AppBottomNavBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { route ->
+                        if (route != currentRoute) {
+                            navController.navigate(route) {
+                                popUpTo(AppRoute.Input) {
+                                    saveState = true
+                                    inclusive = false
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                )
+            }
+        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -338,6 +371,68 @@ private object AppRoute {
     const val SavedWords = "saved_words"
     const val Practice = "practice"
     const val News = "news"
+}
+
+private val BottomNavRoutes = setOf(
+    AppRoute.Input,
+    AppRoute.News,
+    AppRoute.SavedWords,
+    AppRoute.Practice
+)
+
+private data class BottomNavItem(
+    val route: String,
+    val label: String,
+    val iconRes: Int
+)
+
+private val BottomNavItems = listOf(
+    BottomNavItem(AppRoute.Input, "Home", R.drawable.ic_book_a),
+    BottomNavItem(AppRoute.News, "News", R.drawable.ic_newspaper),
+    BottomNavItem(AppRoute.SavedWords, "Saved", R.drawable.ic_bookmark),
+    BottomNavItem(AppRoute.Practice, "Practice", R.drawable.ic_school)
+)
+
+@Composable
+private fun AppBottomNavBar(
+    currentRoute: String?,
+    onNavigate: (String) -> Unit
+) {
+    Column {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        NavigationBar(
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp
+        ) {
+            BottomNavItems.forEach { item ->
+                val selected = currentRoute == item.route
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onNavigate(item.route) },
+                    icon = {
+                        Icon(
+                            painter = painterResource(item.iconRes),
+                            contentDescription = item.label,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = item.label,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
+        }
+    }
 }
 
 private fun NavHostController.navigateSingleTop(route: String) {

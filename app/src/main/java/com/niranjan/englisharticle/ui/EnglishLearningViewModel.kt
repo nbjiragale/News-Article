@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.niranjan.englisharticle.data.ArticleLocalStore
+import com.niranjan.englisharticle.data.YouTubeTranscriptService
 import com.niranjan.englisharticle.domain.ArticleAiService
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.MeaningLookupMode
@@ -34,6 +35,9 @@ data class EnglishLearningUiState(
     val isSummarizingArticle: Boolean = false,
     val summaryError: String? = null,
     val cleaningError: String? = null,
+    val draftYouTubeUrl: String = "",
+    val isImportingYouTube: Boolean = false,
+    val youTubeError: String? = null,
     val selected: SelectedWord? = null,
     val meaningState: MeaningUiState = MeaningUiState.Idle
 )
@@ -44,7 +48,8 @@ sealed interface EnglishNavigationEvent {
 
 class EnglishLearningViewModel(
     private val articleService: ArticleAiService,
-    private val localStore: ArticleLocalStore
+    private val localStore: ArticleLocalStore,
+    private val youTubeTranscriptService: YouTubeTranscriptService = YouTubeTranscriptService()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EnglishLearningUiState())
     val uiState: StateFlow<EnglishLearningUiState> = _uiState.asStateFlow()
@@ -63,6 +68,7 @@ class EnglishLearningViewModel(
     private var meaningLookupJob: Job? = null
     private var articleCleaningJob: Job? = null
     private var summaryJob: Job? = null
+    private var youTubeImportJob: Job? = null
 
     fun updateDraftArticle(article: String) {
         _uiState.update {
@@ -98,7 +104,122 @@ class EnglishLearningViewModel(
     fun clearArticleText() {
         articleCleaningJob?.cancel()
         meaningLookupJob?.cancel()
+        youTubeImportJob?.cancel()
         _uiState.value = EnglishLearningUiState()
+    }
+
+    fun updateDraftYouTubeUrl(url: String) {
+        _uiState.update {
+            it.copy(
+                draftYouTubeUrl = url,
+                youTubeError = null
+            )
+        }
+    }
+
+    fun dismissYouTubeError() {
+        _uiState.update { it.copy(youTubeError = null) }
+    }
+
+    fun importYouTubeUrl() {
+        val url = uiState.value.draftYouTubeUrl.trim()
+        if (url.isBlank()) return
+        if (uiState.value.isImportingYouTube) return
+
+        articleCleaningJob?.cancel()
+        meaningLookupJob?.cancel()
+        summaryJob?.cancel()
+        youTubeImportJob?.cancel()
+
+        _uiState.update {
+            it.copy(
+                isImportingYouTube = true,
+                youTubeError = null,
+                cleaningError = null,
+                selected = null,
+                meaningState = MeaningUiState.Idle
+            )
+        }
+
+        youTubeImportJob = viewModelScope.launch {
+            val transcript = try {
+                youTubeTranscriptService.fetchTranscript(url)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isImportingYouTube = false,
+                        youTubeError = error.message ?: "Could not load the transcript."
+                    )
+                }
+                return@launch
+            }
+
+            val formatted = try {
+                articleService.formatTranscript(
+                    rawTranscript = transcript.transcript,
+                    videoTitle = transcript.title,
+                    videoAuthor = transcript.author
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _uiState.update {
+                    it.copy(
+                        isImportingYouTube = false,
+                        youTubeError = error.message ?: "Could not format the transcript."
+                    )
+                }
+                return@launch
+            }
+
+            val resolved = if (formatted.cleanArticle.isBlank()) {
+                formatted.copy(
+                    title = formatted.title.ifBlank { transcript.title },
+                    author = formatted.author.ifBlank { transcript.author },
+                    cleanArticle = transcript.transcript
+                )
+            } else {
+                formatted
+            }
+
+            _uiState.update {
+                it.copy(
+                    cleanedArticle = resolved,
+                    isImportingYouTube = false,
+                    youTubeError = null,
+                    draftYouTubeUrl = "",
+                    rawArticleForRetry = transcript.transcript
+                )
+            }
+            _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
+
+            val detectedPhrases = try {
+                articleService.extractIdiomaticPhrases(resolved.cleanArticle)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            val articleToSave = if (detectedPhrases.isEmpty()) {
+                resolved
+            } else {
+                resolved.copy(idiomaticPhrases = detectedPhrases)
+            }
+
+            if (detectedPhrases.isNotEmpty()) {
+                _uiState.update { current ->
+                    if (current.cleanedArticle?.cleanArticle == resolved.cleanArticle) {
+                        current.copy(cleanedArticle = articleToSave)
+                    } else {
+                        current
+                    }
+                }
+            }
+
+            runCatching { localStore.saveRecentArticle(articleToSave) }
+        }
     }
 
     fun importSharedArticleText(article: String) {

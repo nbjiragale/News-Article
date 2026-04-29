@@ -90,6 +90,64 @@ class OpenRouterArticleService(
         return result.copy(cleanArticle = postCleaned)
     }
 
+    override suspend fun formatTranscript(
+        rawTranscript: String,
+        videoTitle: String,
+        videoAuthor: String
+    ): CleanArticleResult {
+        val titleHint = videoTitle.takeIf { it.isNotBlank() }.orEmpty()
+        val authorHint = videoAuthor.takeIf { it.isNotBlank() }.orEmpty()
+
+        val content = sendJsonChatRequest(
+            systemMessage = """
+                You convert raw YouTube transcripts into readable English articles for a Kannada-speaking learner.
+                Return only valid JSON.
+            """.trimIndent(),
+            userMessage = """
+                Convert the raw YouTube transcript below into a readable article.
+
+                STRICT rules:
+                - Do NOT summarize, shorten, paraphrase, or translate.
+                - Keep every spoken sentence, in the original speaking order.
+                - Preserve the speaker's words; only fix capitalization, punctuation, and obvious filler artifacts (uh, um, [Music], [Applause], speaker tags like "Speaker 1:") so it reads as prose.
+                - Add sentence boundaries and paragraph breaks where natural. Use a BLANK LINE ("\n\n") between paragraphs of 2-4 sentences each based on topic shifts.
+                - Do not invent facts, names, dates, or numbers. If the transcript is in another language, keep that language; do not translate.
+                - Do not add headings, bullet lists, intro/outro lines, "in this video", or commentary.
+                - Do not include timestamps.
+
+                Metadata:
+                - Use the video title as "title" if provided.
+                - Use the channel/author name as "author" if provided.
+                - Leave "subtitle" and "publishedDate" as empty strings.
+
+                Return JSON in this exact shape:
+                {
+                  "title": "",
+                  "subtitle": "",
+                  "author": "",
+                  "publishedDate": "",
+                  "cleanArticle": ""
+                }
+
+                Video title: $titleHint
+                Channel: $authorHint
+
+                Raw transcript:
+                $rawTranscript
+            """.trimIndent()
+        )
+
+        val parsed = CleanArticleResult.fromJson(JSONObject(content))
+        val resolvedTitle = parsed.title.ifBlank { titleHint }
+        val resolvedAuthor = parsed.author.ifBlank { authorHint }
+        val postCleaned = ArticleFormatter.postClean(parsed.cleanArticle)
+        return parsed.copy(
+            title = resolvedTitle,
+            author = resolvedAuthor,
+            cleanArticle = postCleaned
+        )
+    }
+
     override suspend fun extractIdiomaticPhrases(articleText: String): List<String> {
         if (articleText.isBlank()) return emptyList()
 

@@ -107,7 +107,13 @@ fun EnglishLearningApp(
                     onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
                     onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
                     onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
-                    onOpenNews = { navController.navigateSingleTop(AppRoute.News) }
+                    onOpenNews = { navController.navigateSingleTop(AppRoute.News) },
+                    youTubeUrl = uiState.draftYouTubeUrl,
+                    onYouTubeUrlChange = viewModel::updateDraftYouTubeUrl,
+                    onImportYouTube = viewModel::importYouTubeUrl,
+                    isImportingYouTube = uiState.isImportingYouTube,
+                    youTubeError = uiState.youTubeError,
+                    onDismissYouTubeError = viewModel::dismissYouTubeError
                 )
             }
 
@@ -173,7 +179,13 @@ fun EnglishLearningApp(
                         onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
                         onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
                         onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
-                        onOpenNews = { navController.navigateSingleTop(AppRoute.News) }
+                        onOpenNews = { navController.navigateSingleTop(AppRoute.News) },
+                        youTubeUrl = uiState.draftYouTubeUrl,
+                        onYouTubeUrlChange = viewModel::updateDraftYouTubeUrl,
+                        onImportYouTube = viewModel::importYouTubeUrl,
+                        isImportingYouTube = uiState.isImportingYouTube,
+                        youTubeError = uiState.youTubeError,
+                        onDismissYouTubeError = viewModel::dismissYouTubeError
                     )
                 } else {
                     val playbackState by textToSpeech.playbackState

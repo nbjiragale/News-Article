@@ -96,9 +96,11 @@ fun ArticleInputScreen(
                 value = article,
                 onValueChange = onArticleChange,
                 modifier = Modifier
-                    .heightIn(min = 220.dp)
+                    .heightIn(min = 220.dp, max = 360.dp)
                     .fillMaxWidth(),
                 label = { Text("Article text") },
+                minLines = 10,
+                maxLines = 16,
                 placeholder = { Text("Paste a full article — headlines, body, the works.") },
                 shape = RoundedCornerShape(20.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
@@ -411,3 +413,6 @@ private fun ArticleInputPreview() {
         )
     }
 }
+
+
+

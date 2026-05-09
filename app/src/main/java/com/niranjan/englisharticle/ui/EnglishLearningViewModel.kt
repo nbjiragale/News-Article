@@ -156,33 +156,13 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val formatted = try {
-                articleService.formatTranscript(
-                    rawTranscript = transcript.transcript,
-                    videoTitle = transcript.title,
-                    videoAuthor = transcript.author
-                )
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                _uiState.update {
-                    it.copy(
-                        isImportingYouTube = false,
-                        youTubeError = error.message ?: "Could not format the transcript."
-                    )
-                }
-                return@launch
-            }
-
-            val resolved = if (formatted.cleanArticle.isBlank()) {
-                formatted.copy(
-                    title = formatted.title.ifBlank { transcript.title },
-                    author = formatted.author.ifBlank { transcript.author },
-                    cleanArticle = transcript.transcript
-                )
-            } else {
-                formatted
-            }
+            val resolved = CleanArticleResult(
+                title = transcript.title,
+                subtitle = "",
+                author = transcript.author,
+                publishedDate = "",
+                cleanArticle = transcript.transcript
+            )
 
             _uiState.update {
                 it.copy(

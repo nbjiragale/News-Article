@@ -34,11 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -57,7 +55,6 @@ import com.niranjan.englisharticle.domain.WordToken
 import com.niranjan.englisharticle.domain.WordTokenGroup
 import com.niranjan.englisharticle.domain.ensureParagraphs
 import com.niranjan.englisharticle.domain.findSentenceContaining
-import com.niranjan.englisharticle.domain.isLikelyHeading
 import com.niranjan.englisharticle.domain.toMeaningTokenGroups
 import com.niranjan.englisharticle.domain.toWordTokens
 import com.niranjan.englisharticle.ui.components.ArticleHeader
@@ -65,6 +62,7 @@ import com.niranjan.englisharticle.ui.components.ArticleListenButton
 import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.state.SelectedWord
+import com.niranjan.englisharticle.ui.theme.ArticleReadingFontFamily
 import com.niranjan.englisharticle.ui.tts.ArticlePlaybackState
 
 @Composable
@@ -98,13 +96,9 @@ fun ArticleViewerScreen(
                 ArticleParagraph(
                     paragraphIndex = paragraphIndex,
                     tokens = paragraphTokens,
-                    text = text,
-                    isHeading = text.isLikelyHeading(paragraphIndex)
+                    text = text
                 )
             }
-    }
-    val firstBodyParagraphIndex = remember(paragraphs) {
-        paragraphs.indexOfFirst { !it.isHeading }
     }
     val paragraphWordOffsets = remember(paragraphs) {
         var sum = 0
@@ -227,20 +221,15 @@ fun ArticleViewerScreen(
                     items = paragraphs,
                     key = { _, paragraph -> "paragraph_${paragraph.paragraphIndex}" }
                 ) { paraIndex, paragraph ->
-                    if (paragraph.isHeading) {
-                        ArticleHeading(text = paragraph.text)
-                    } else {
-                        InteractiveParagraph(
-                            paragraphTokens = paragraph.tokens,
-                            article = article,
-                            articleBody = articleBody,
-                            isFirstBodyParagraph = paraIndex == firstBodyParagraphIndex,
-                            paragraphFirstWordIndex = paragraphWordOffsets.getOrElse(paraIndex) { 0 },
-                            currentWordIndex = effectiveWordIndex,
-                            lookedUpWords = lookedUpWords,
-                            onWordTap = onWordTap
-                        )
-                    }
+                    InteractiveParagraph(
+                        paragraphTokens = paragraph.tokens,
+                        article = article,
+                        articleBody = articleBody,
+                        paragraphFirstWordIndex = paragraphWordOffsets.getOrElse(paraIndex) { 0 },
+                        currentWordIndex = effectiveWordIndex,
+                        lookedUpWords = lookedUpWords,
+                        onWordTap = onWordTap
+                    )
                 }
             }
         }
@@ -322,37 +311,10 @@ private const val HIGHLIGHT_PREFS_NAME = "article_viewer_prefs"
 private const val HIGHLIGHT_PREF_KEY = "highlight_word_enabled"
 
 @Composable
-private fun ArticleHeading(text: String) {
-    val accent = MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 680.dp)
-            .padding(horizontal = 24.dp, vertical = 4.dp)
-            .drawBehind {
-                drawLine(
-                    color = accent,
-                    start = Offset(-12.dp.toPx(), 0f),
-                    end = Offset(-12.dp.toPx(), size.height),
-                    strokeWidth = 3.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-            }
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
 private fun InteractiveParagraph(
     paragraphTokens: List<WordToken>,
     article: CleanArticleResult,
     articleBody: String,
-    isFirstBodyParagraph: Boolean,
     paragraphFirstWordIndex: Int,
     currentWordIndex: Int?,
     lookedUpWords: MutableSet<String>,
@@ -406,16 +368,6 @@ private fun InteractiveParagraph(
         )
     }
 
-    val baseStyle = MaterialTheme.typography.bodyLarge
-    val style = if (isFirstBodyParagraph) {
-        baseStyle.copy(
-            fontSize = androidx.compose.ui.unit.TextUnit(21f, androidx.compose.ui.unit.TextUnitType.Sp),
-            lineHeight = androidx.compose.ui.unit.TextUnit(33f, androidx.compose.ui.unit.TextUnitType.Sp)
-        )
-    } else {
-        baseStyle
-    }
-
     Text(
         text = renderContent.text,
         modifier = Modifier
@@ -428,7 +380,7 @@ private fun InteractiveParagraph(
                     onLongPress = { position -> openMeaning(position, showSentence = true) }
                 )
             },
-        style = style,
+        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = ArticleReadingFontFamily),
         fontStyle = if (isQuote) FontStyle.Italic else FontStyle.Normal,
         color = MaterialTheme.colorScheme.onSurface,
         onTextLayout = { textLayoutResult = it }
@@ -519,8 +471,7 @@ private data class InteractiveTextRange(
 private data class ArticleParagraph(
     val paragraphIndex: Int,
     val tokens: List<WordToken>,
-    val text: String,
-    val isHeading: Boolean
+    val text: String
 )
 
 @Suppress("unused")

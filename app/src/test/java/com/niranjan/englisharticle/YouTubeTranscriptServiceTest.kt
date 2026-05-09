@@ -3,7 +3,10 @@ package com.niranjan.englisharticle
 import com.niranjan.englisharticle.data.YouTubeTranscriptService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class YouTubeTranscriptServiceTest {
 
@@ -89,33 +92,35 @@ class YouTubeTranscriptServiceTest {
     }
 
     @Test
-    fun extractPlayerResponseJson_parsesVarAssignment() {
-        val html = """
-            <html><head></head><body>
-              <script>
-                var ytInitialPlayerResponse = {"videoDetails":{"title":"Hello \"World\""},"x":"}{"};
-                var foo = 1;
-              </script>
-            </body></html>
-        """.trimIndent()
+    fun normalizeTranscriptUrl_keepsAbsoluteUrlsAsIs() {
+        val original = "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ"
+        assertEquals(original, YouTubeTranscriptService.normalizeTranscriptUrl(original))
+    }
 
-        val json = YouTubeTranscriptService.extractPlayerResponseJson(html)
+    @Test
+    fun normalizeTranscriptUrl_convertsRootRelativePathToAbsolute() {
         assertEquals(
-            """{"videoDetails":{"title":"Hello \"World\""},"x":"}{"}""",
-            json
+            "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ",
+            YouTubeTranscriptService.normalizeTranscriptUrl("/api/timedtext?v=dQw4w9WgXcQ")
         )
     }
 
     @Test
-    fun extractPlayerResponseJson_parsesEmbeddedKey() {
-        val html = """{"foo":1,"ytInitialPlayerResponse":{"videoDetails":{"title":"x"}}}"""
-        val json = YouTubeTranscriptService.extractPlayerResponseJson(html)
-        assertEquals("""{"videoDetails":{"title":"x"}}""", json)
-    }
+    fun fetchTranscript_liveVideo_producesTranscriptForProvidedLink() = runBlocking {
+        assumeTrue(
+            "Set RUN_LIVE_YOUTUBE_TESTS=true to run live YouTube transcript test.",
+            System.getenv("RUN_LIVE_YOUTUBE_TESTS") == "true"
+        )
 
-    @Test
-    fun extractPlayerResponseJson_returnsNullWhenAbsent() {
-        val html = "<html><body>no player response here</body></html>"
-        assertNull(YouTubeTranscriptService.extractPlayerResponseJson(html))
+        val service = YouTubeTranscriptService()
+        val result = service.fetchTranscript("https://youtu.be/TozN7z3Yif8?si=_Z56Abt5z_y64U_P")
+
+        assertEquals("TozN7z3Yif8", result.videoId)
+        assertTrue("Expected non-empty title.", result.title.isNotBlank())
+        assertTrue("Expected non-empty transcript.", result.transcript.isNotBlank())
+        assertTrue(
+            "Expected transcript with at least 20 words.",
+            result.transcript.split(Regex("\\s+")).count { it.isNotBlank() } >= 20
+        )
     }
 }

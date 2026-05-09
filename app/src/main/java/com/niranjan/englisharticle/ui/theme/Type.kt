@@ -1,10 +1,20 @@
 package com.niranjan.englisharticle.ui.theme
 
+import androidx.compose.ui.text.font.Font
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.niranjan.englisharticle.R
+
+val ArticleReadingFontFamily = FontFamily(
+    Font(R.font.atkinson_hyperlegible_regular, FontWeight.Normal),
+    Font(R.font.atkinson_hyperlegible_italic, FontWeight.Normal, FontStyle.Italic),
+    Font(R.font.atkinson_hyperlegible_bold, FontWeight.Bold),
+    Font(R.font.atkinson_hyperlegible_bold_italic, FontWeight.Bold, FontStyle.Italic)
+)
 
 // Sans for chrome/UI, serif for body — a literary feel with M3 Expressive scale.
 // Display sizes are intentionally large for hero moments (article hero, sheet

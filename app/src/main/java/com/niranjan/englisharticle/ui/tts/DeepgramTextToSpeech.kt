@@ -12,7 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -100,23 +99,32 @@ class DeepgramTextToSpeech(
                 val chunks = cleaned.chunkForTts(MAX_CHARS_PER_REQUEST)
                 val chunkPlans = buildChunkPlans(chunks)
 
-                val synthesized = try {
-                    coroutineScope {
-                        chunkPlans.map { plan ->
-                            async(Dispatchers.IO) {
-                                synthesisSemaphore.withPermit { synthesizeChunk(plan) }
-                            }
-                        }.awaitAll()
+                coroutineScope {
+                    // Launch every chunk synthesis up front; the semaphore bounds how many run at
+                    // once so later chunks are prefetched while earlier ones play.
+                    val pending = chunkPlans.map { plan ->
+                        async(Dispatchers.IO) { synthesisSemaphore.withPermit { synthesizeChunk(plan) } }
                     }
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                } catch (error: Throwable) {
-                    Log.w(TAG, "Deepgram synthesis failed; falling back to system TTS", error)
-                    onUnavailable(cleaned)
-                    return@launch
-                }
 
-                playSequentially(synthesized, chunkPlans, onWordIndex)
+                    // Await each chunk in order and play it as soon as it is ready, so audio starts
+                    // after the first chunk instead of after the whole article is synthesized.
+                    for ((index, deferred) in pending.withIndex()) {
+                        val chunk = try {
+                            deferred.await()
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (error: Throwable) {
+                            // Stop prefetching the rest and fall back to system TTS for only the
+                            // text that hasn't been spoken yet (avoids replaying earlier chunks).
+                            pending.drop(index + 1).forEach { it.cancel() }
+                            val remainingText = chunkPlans.drop(index).joinToString(" ") { it.text }
+                            Log.w(TAG, "Deepgram synthesis failed at chunk $index; falling back to system TTS", error)
+                            onUnavailable(remainingText)
+                            return@coroutineScope
+                        }
+                        playFile(chunk, chunkPlans[index], onWordIndex)
+                    }
+                }
             } finally {
                 onWordIndex(null)
                 onComplete()
@@ -270,16 +278,6 @@ class DeepgramTextToSpeech(
             return parseSttWords(responseText)
         } finally {
             connection.disconnect()
-        }
-    }
-
-    private suspend fun playSequentially(
-        synthesized: List<SynthesizedChunk>,
-        plans: List<ChunkPlan>,
-        onWordIndex: (Int?) -> Unit
-    ) {
-        for ((index, chunk) in synthesized.withIndex()) {
-            playFile(chunk, plans[index], onWordIndex)
         }
     }
 

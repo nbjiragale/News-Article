@@ -3,18 +3,22 @@ package com.niranjan.englisharticle.ui.tts
 import android.content.Context
 import android.media.MediaPlayer
 import android.util.Log
+import com.niranjan.englisharticle.BuildConfig
+import com.niranjan.englisharticle.data.RetryableHttpException
+import com.niranjan.englisharticle.data.retryWithBackoff
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,11 +38,19 @@ class DeepgramTextToSpeech(
     private val cacheDir: File = File(appContext.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** Bounds how many chunks hit Deepgram (speak + STT) at once, to avoid rate-limit bursts. */
+    private val synthesisSemaphore = Semaphore(MAX_CONCURRENT_SYNTHESIS)
+
     private var activeJob: Job? = null
     private var player: MediaPlayer? = null
 
     @Volatile
     private var paused: Boolean = false
+
+    init {
+        // Keep the on-disk audio/timings cache from growing without bound.
+        scope.launch(Dispatchers.IO) { runCatching { pruneCache() } }
+    }
 
     val isConfigured: Boolean
         get() = apiKey.isNotBlank()
@@ -87,21 +99,32 @@ class DeepgramTextToSpeech(
                 val chunks = cleaned.chunkForTts(MAX_CHARS_PER_REQUEST)
                 val chunkPlans = buildChunkPlans(chunks)
 
-                val synthesized = try {
-                    coroutineScope {
-                        chunkPlans.map { plan ->
-                            async(Dispatchers.IO) { synthesizeChunk(plan) }
-                        }.awaitAll()
+                coroutineScope {
+                    // Launch every chunk synthesis up front; the semaphore bounds how many run at
+                    // once so later chunks are prefetched while earlier ones play.
+                    val pending = chunkPlans.map { plan ->
+                        async(Dispatchers.IO) { synthesisSemaphore.withPermit { synthesizeChunk(plan) } }
                     }
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                } catch (error: Throwable) {
-                    Log.w(TAG, "Deepgram synthesis failed; falling back to system TTS", error)
-                    onUnavailable(cleaned)
-                    return@launch
-                }
 
-                playSequentially(synthesized, chunkPlans, onWordIndex)
+                    // Await each chunk in order and play it as soon as it is ready, so audio starts
+                    // after the first chunk instead of after the whole article is synthesized.
+                    for ((index, deferred) in pending.withIndex()) {
+                        val chunk = try {
+                            deferred.await()
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (error: Throwable) {
+                            // Stop prefetching the rest and fall back to system TTS for only the
+                            // text that hasn't been spoken yet (avoids replaying earlier chunks).
+                            pending.drop(index + 1).forEach { it.cancel() }
+                            val remainingText = chunkPlans.drop(index).joinToString(" ") { it.text }
+                            Log.w(TAG, "Deepgram synthesis failed at chunk $index; falling back to system TTS", error)
+                            onUnavailable(remainingText)
+                            return@coroutineScope
+                        }
+                        playFile(chunk, chunkPlans[index], onWordIndex)
+                    }
+                }
             } finally {
                 onWordIndex(null)
                 onComplete()
@@ -132,21 +155,19 @@ class DeepgramTextToSpeech(
 
         val cachedStarts = if (timingsFile.exists()) loadTimings(timingsFile, plan.sourceWords.size) else null
         if (cachedStarts != null) {
-            Log.i(
-                TAG,
+            logDebug(
                 "Timings cache HIT (chunk=${plan.text.take(40).replace('\n', ' ')}\u2026 words=${plan.sourceWords.size})"
             )
             return@withContext SynthesizedChunk(mp3File, cachedStarts)
         }
 
         // Cache miss — try Deepgram STT for accurate per-word timing.
-        Log.i(
-            TAG,
+        logDebug(
             "Timings cache MISS, calling STT (chunk=${plan.text.take(40).replace('\n', ' ')}\u2026 words=${plan.sourceWords.size} mp3=${mp3File.length()}B)"
         )
         val realStarts = try {
             val sttWords = fetchSttWordTimings(mp3File)
-            Log.i(TAG, "STT returned ${sttWords.size} words for ${plan.sourceWords.size} source words")
+            logDebug("STT returned ${sttWords.size} words for ${plan.sourceWords.size} source words")
             val (aligned, matchedCount) = alignSttWithSourceVerbose(plan.sourceWords, sttWords)
             if (aligned == null) {
                 Log.w(
@@ -154,8 +175,7 @@ class DeepgramTextToSpeech(
                     "Alignment fell below quality threshold (matched=$matchedCount/${plan.sourceWords.size}); using estimated timings"
                 )
             } else {
-                Log.i(
-                    TAG,
+                logDebug(
                     "Alignment OK (matched=$matchedCount/${plan.sourceWords.size}, ratio=${(matchedCount * 100) / plan.sourceWords.size.coerceAtLeast(1)}%)"
                 )
             }
@@ -176,9 +196,16 @@ class DeepgramTextToSpeech(
     private suspend fun ensureMp3(chunk: String): File = withContext(Dispatchers.IO) {
         val cacheFile = mp3CacheFileFor(chunk)
         if (cacheFile.exists() && cacheFile.length() > 0L) {
+            // Touch on hit so cache pruning approximates least-recently-used eviction.
+            cacheFile.setLastModified(System.currentTimeMillis())
             return@withContext cacheFile
         }
 
+        retryWithBackoff { downloadMp3(chunk, cacheFile) }
+        cacheFile
+    }
+
+    private fun downloadMp3(chunk: String, cacheFile: File) {
         val tempFile = File(cacheDir, cacheFile.name + ".tmp")
         tempFile.delete()
 
@@ -200,7 +227,11 @@ class DeepgramTextToSpeech(
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
                 val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                throw DeepgramException("Deepgram speak returned $responseCode: $errorBody")
+                Log.w(TAG, "Deepgram speak returned $responseCode: ${errorBody.take(200)}")
+                if (responseCode == 429 || responseCode in 500..599) {
+                    throw RetryableHttpException(responseCode, "Deepgram speak HTTP $responseCode")
+                }
+                throw DeepgramException("Deepgram speak returned $responseCode")
             }
 
             connection.inputStream.use { input ->
@@ -211,13 +242,16 @@ class DeepgramTextToSpeech(
                 tempFile.copyTo(cacheFile, overwrite = true)
                 tempFile.delete()
             }
-            cacheFile
         } finally {
             connection.disconnect()
         }
     }
 
     private suspend fun fetchSttWordTimings(mp3File: File): List<SttWord> = withContext(Dispatchers.IO) {
+        retryWithBackoff { requestSttWordTimings(mp3File) }
+    }
+
+    private fun requestSttWordTimings(mp3File: File): List<SttWord> {
         val connection = (URL(deepgramListenUrl()).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -234,22 +268,16 @@ class DeepgramTextToSpeech(
             val responseCode = connection.responseCode
             if (responseCode !in 200..299) {
                 val body = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                throw DeepgramException("Deepgram listen returned $responseCode: $body")
+                Log.w(TAG, "Deepgram listen returned $responseCode: ${body.take(200)}")
+                if (responseCode == 429 || responseCode in 500..599) {
+                    throw RetryableHttpException(responseCode, "Deepgram listen HTTP $responseCode")
+                }
+                throw DeepgramException("Deepgram listen returned $responseCode")
             }
             val responseText = connection.inputStream.bufferedReader().use { it.readText() }
-            parseSttWords(responseText)
+            return parseSttWords(responseText)
         } finally {
             connection.disconnect()
-        }
-    }
-
-    private suspend fun playSequentially(
-        synthesized: List<SynthesizedChunk>,
-        plans: List<ChunkPlan>,
-        onWordIndex: (Int?) -> Unit
-    ) {
-        for ((index, chunk) in synthesized.withIndex()) {
-            playFile(chunk, plans[index], onWordIndex)
         }
     }
 
@@ -267,8 +295,7 @@ class DeepgramTextToSpeech(
             val durationMs = mediaPlayer.duration.coerceAtLeast(1)
             val rawStarts = chunk.realStartsMs ?: plan.estimatedWordStartsForDuration(durationMs)
             val starts = applyAudioOffset(rawStarts, audioOffsetMs)
-            Log.i(
-                TAG,
+            logDebug(
                 "Playing chunk (real=${chunk.realStartsMs != null} duration=${durationMs}ms words=${starts.size} offset=${audioOffsetMs}ms)"
             )
             val wordTimings = WordTimings(starts)
@@ -362,6 +389,30 @@ class DeepgramTextToSpeech(
         }
     }
 
+    /**
+     * Deletes the least-recently-used cache files until the directory is back under
+     * [MAX_CACHE_BYTES]. Runs off the main thread; failures are non-fatal.
+     */
+    private fun pruneCache() {
+        val files = cacheDir.listFiles()?.filter { it.isFile } ?: return
+        var totalBytes = files.sumOf { it.length() }
+        if (totalBytes <= MAX_CACHE_BYTES) return
+
+        for (file in files.sortedBy { it.lastModified() }) {
+            if (totalBytes <= MAX_CACHE_BYTES) break
+            val size = file.length()
+            if (file.delete()) {
+                totalBytes -= size
+                logDebug("Pruned cache file ${file.name} (${size}B)")
+            }
+        }
+    }
+
+    /** Verbose, content-bearing logging that is compiled away in release builds. */
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) Log.i(TAG, message)
+    }
+
     private fun deepgramSpeakUrl(): String =
         "https://api.deepgram.com/v1/speak?model=$voice&encoding=mp3"
 
@@ -378,6 +429,8 @@ class DeepgramTextToSpeech(
         private const val READ_TIMEOUT_MS = 60_000
         private const val WORD_TICK_MS = 40L
         private const val STT_MODEL = "nova-3"
+        private const val MAX_CONCURRENT_SYNTHESIS = 3
+        private const val MAX_CACHE_BYTES = 200L * 1024 * 1024
 
         // Bumped when the alignment algorithm changes so older cached timings are recomputed.
         private const val TIMINGS_FORMAT_VERSION = 2

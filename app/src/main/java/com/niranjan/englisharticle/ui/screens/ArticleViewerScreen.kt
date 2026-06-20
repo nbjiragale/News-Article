@@ -30,6 +30,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateSetOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.WordToken
@@ -85,30 +88,41 @@ fun ArticleViewerScreen(
     onResumeListening: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val articleBody = remember(article.cleanArticle) { article.cleanArticle.ensureParagraphs() }
-    val tokens = remember(articleBody) { articleBody.toWordTokens() }
-    val paragraphs = remember(tokens) {
-        tokens.groupBy { it.paragraphIndex }
-            .entries
-            .sortedBy { it.key }
-            .map { (paragraphIndex, paragraphTokens) ->
-                val text = paragraphTokens.joinToString(" ") { it.text }
-                ArticleParagraph(
-                    paragraphIndex = paragraphIndex,
-                    tokens = paragraphTokens,
-                    text = text
-                )
+    // Tokenizing/grouping a long article is non-trivial; run it off the main thread so opening the
+    // reader never janks. Until it completes the body is empty (header still renders).
+    val readerContent by produceState(
+        initialValue = EmptyReaderContent,
+        key1 = article.cleanArticle
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val body = article.cleanArticle.ensureParagraphs()
+            val paragraphs = body.toWordTokens()
+                .groupBy { it.paragraphIndex }
+                .entries
+                .sortedBy { it.key }
+                .map { (paragraphIndex, paragraphTokens) ->
+                    ArticleParagraph(
+                        paragraphIndex = paragraphIndex,
+                        tokens = paragraphTokens,
+                        text = paragraphTokens.joinToString(" ") { it.text }
+                    )
+                }
+            var sum = 0
+            val offsets = paragraphs.map { paragraph ->
+                val start = sum
+                sum += paragraph.tokens.size
+                start
             }
-    }
-    val paragraphWordOffsets = remember(paragraphs) {
-        var sum = 0
-        paragraphs.map { paragraph ->
-            val start = sum
-            sum += paragraph.tokens.size
-            start
+            ReaderContent(articleBody = body, paragraphs = paragraphs, paragraphWordOffsets = offsets)
         }
     }
+    val articleBody = readerContent.articleBody
+    val paragraphs = readerContent.paragraphs
+    val paragraphWordOffsets = readerContent.paragraphWordOffsets
     val lookedUpWords = remember { mutableStateSetOf<String>() }
+    // Snapshot recomputed only when a new word is looked up (set never shrinks), so paragraph
+    // rendering doesn't allocate a fresh Set on every recomposition during playback.
+    val lookedUpSnapshot = remember(lookedUpWords.size) { lookedUpWords.toSet() }
     val context = LocalContext.current
     val highlightPrefs = remember(context) {
         context.applicationContext.getSharedPreferences(
@@ -123,6 +137,12 @@ fun ArticleViewerScreen(
         highlightPrefs.edit().putBoolean(HIGHLIGHT_PREF_KEY, highlightingEnabled).apply()
     }
     val effectiveWordIndex = if (highlightingEnabled) currentWordIndex else null
+    // Only the paragraph that contains the spoken word needs the live index; every other paragraph
+    // receives null and therefore skips recomposition as the highlight advances.
+    val activeParagraphIndex = remember(effectiveWordIndex, paragraphWordOffsets) {
+        val wordIndex = effectiveWordIndex ?: return@remember -1
+        paragraphWordOffsets.indexOfLast { it <= wordIndex }
+    }
     val listState = rememberLazyListState()
     val readingProgress by remember {
         derivedStateOf {
@@ -226,8 +246,9 @@ fun ArticleViewerScreen(
                         article = article,
                         articleBody = articleBody,
                         paragraphFirstWordIndex = paragraphWordOffsets.getOrElse(paraIndex) { 0 },
-                        currentWordIndex = effectiveWordIndex,
-                        lookedUpWords = lookedUpWords,
+                        currentWordIndex = if (paraIndex == activeParagraphIndex) effectiveWordIndex else null,
+                        lookedUpWords = lookedUpSnapshot,
+                        onWordLookedUp = { lookedUpWords.add(it) },
                         onWordTap = onWordTap
                     )
                 }
@@ -317,7 +338,8 @@ private fun InteractiveParagraph(
     articleBody: String,
     paragraphFirstWordIndex: Int,
     currentWordIndex: Int?,
-    lookedUpWords: MutableSet<String>,
+    lookedUpWords: Set<String>,
+    onWordLookedUp: (String) -> Unit,
     onWordTap: (SelectedWord) -> Unit
 ) {
     val isQuote = paragraphTokens.firstOrNull()?.text?.startsWith("\"") == true
@@ -338,12 +360,11 @@ private fun InteractiveParagraph(
         if (relative < 0) return@remember -1
         groupTokenRanges.indexOfFirst { range -> relative in range }
     }
-    val lookedUpSnapshot = lookedUpWords.toSet()
     val highlightBackground = MaterialTheme.colorScheme.primaryContainer
     val highlightForeground = MaterialTheme.colorScheme.onPrimaryContainer
     val renderContent = buildParagraphRenderContent(
         tokenGroups = tokenGroups,
-        lookedUpWords = lookedUpSnapshot,
+        lookedUpWords = lookedUpWords,
         normalColor = MaterialTheme.colorScheme.onSurface,
         lookedUpColor = MaterialTheme.colorScheme.primary,
         phraseColor = MaterialTheme.colorScheme.tertiary,
@@ -358,7 +379,7 @@ private fun InteractiveParagraph(
         val offset = layoutResult.getOffsetForPosition(position)
         val range = renderContent.ranges.firstOrNull { offset >= it.start && offset < it.end } ?: return
 
-        lookedUpWords.add(range.lookupText.lowercase())
+        onWordLookedUp(range.lookupText.lowercase())
         onWordTap(
             SelectedWord(
                 word = range.lookupText,
@@ -472,6 +493,18 @@ private data class ArticleParagraph(
     val paragraphIndex: Int,
     val tokens: List<WordToken>,
     val text: String
+)
+
+private data class ReaderContent(
+    val articleBody: String,
+    val paragraphs: List<ArticleParagraph>,
+    val paragraphWordOffsets: List<Int>
+)
+
+private val EmptyReaderContent = ReaderContent(
+    articleBody = "",
+    paragraphs = emptyList(),
+    paragraphWordOffsets = emptyList()
 )
 
 @Suppress("unused")

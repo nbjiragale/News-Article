@@ -2,6 +2,7 @@ package com.niranjan.englisharticle.data
 
 import android.util.Log
 import android.util.Xml
+import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.domain.YouTubeTranscript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -343,9 +344,14 @@ class YouTubeTranscriptService {
         return text.replace(Regex("\\s+"), " ").take(maxLength)
     }
 
-    private fun logDebug(message: String) = logInternal(level = "D", message = message)
+    // Debug/info logs carry request content (URLs, transcript stats); keep them out of release builds.
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) logInternal(level = "D", message = message)
+    }
 
-    private fun logInfo(message: String) = logInternal(level = "I", message = message)
+    private fun logInfo(message: String) {
+        if (BuildConfig.DEBUG) logInternal(level = "I", message = message)
+    }
 
     private fun logWarn(message: String) = logInternal(level = "W", message = message)
 

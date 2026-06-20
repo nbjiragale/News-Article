@@ -6,11 +6,14 @@ import com.niranjan.englisharticle.domain.ArticleSummary
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -359,7 +362,7 @@ class OpenRouterArticleService(
     private suspend fun sendJsonChatRequest(
         systemMessage: String,
         userMessage: String
-    ): String = withContext(Dispatchers.IO) {
+    ): String {
         if (apiKey.isBlank()) {
             error("OpenRouter API key is missing.")
         }
@@ -385,7 +388,21 @@ class OpenRouterArticleService(
                 JSONObject()
                     .put("type", "json_object")
             )
+            .toString()
 
+        return try {
+            retryWithBackoff {
+                withContext(Dispatchers.IO) { executeChatRequest(payload) }
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            // Surface a friendly message to the UI; keep the raw detail in logs only.
+            throw IllegalStateException(friendlyMessage(error), error)
+        }
+    }
+
+    private fun executeChatRequest(payload: String): String {
         val connection = (URL("https://openrouter.ai/api/v1/chat/completions").openConnection() as HttpURLConnection)
             .apply {
                 requestMethod = "POST"
@@ -398,32 +415,53 @@ class OpenRouterArticleService(
                 setRequestProperty("X-Title", "English Article")
             }
 
-        OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-            writer.write(payload.toString())
-        }
+        try {
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(payload)
+            }
 
-        val responseCode = connection.responseCode
-        val stream = if (responseCode in 200..299) {
-            connection.inputStream
-        } else {
-            connection.errorStream
-        }
-        val body = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-        connection.disconnect()
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+            val body = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
 
-        if (responseCode !in 200..299) {
-            error("OpenRouter error $responseCode: ${body.take(220)}")
-        }
+            if (responseCode !in 200..299) {
+                Log.w(TAG, "OpenRouter error $responseCode: ${body.take(300)}")
+                if (responseCode == 429 || responseCode in 500..599) {
+                    throw RetryableHttpException(responseCode, "OpenRouter HTTP $responseCode")
+                }
+                error("OpenRouter HTTP $responseCode")
+            }
 
-        JSONObject(body)
-            .getJSONArray("choices")
-            .getJSONObject(0)
-            .getJSONObject("message")
-            .getString("content")
-            .trim()
-            .removeSurrounding("```json", "```")
-            .removeSurrounding("```")
-            .trim()
+            return JSONObject(body)
+                .getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+                .getString("content")
+                .trim()
+                .removeSurrounding("```json", "```")
+                .removeSurrounding("```")
+                .trim()
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun friendlyMessage(error: Throwable): String = when {
+        error is RetryableHttpException && error.code == 429 ->
+            "The service is busy right now. Please wait a moment and try again."
+        error is RetryableHttpException ->
+            "The article service is temporarily unavailable. Please try again."
+        error is IOException ->
+            "Couldn't reach the article service. Please check your internet connection."
+        else -> error.message ?: "Something went wrong. Please try again."
+    }
+
+    private companion object {
+        private const val TAG = "OpenRouterService"
     }
 }
 

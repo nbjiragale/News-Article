@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -69,7 +70,6 @@ fun EnglishLearningApp(
     val uiState by viewModel.uiState.collectAsState()
     val recentArticles by viewModel.recentArticles.collectAsState()
     val savedWords by viewModel.savedWords.collectAsState()
-
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(navController, viewModel) {
@@ -100,7 +100,7 @@ fun EnglishLearningApp(
     val currentRoute = backStackEntry?.destination?.route
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = MaterialTheme.colorScheme.surface,
         bottomBar = {
             if (currentRoute in BottomNavRoutes) {
                 AppBottomNavBar(
@@ -146,7 +146,6 @@ fun EnglishLearningApp(
                     onDismissYouTubeError = viewModel::dismissYouTubeError
                 )
             }
-
             composable(AppRoute.Reader) {
                 val currentArticle = uiState.cleanedArticle
                 if (currentArticle == null) {
@@ -200,7 +199,6 @@ fun EnglishLearningApp(
                     )
                 }
             }
-
             composable(AppRoute.Recents) {
                 RecentArticlesScreen(
                     articles = recentArticles,
@@ -211,7 +209,6 @@ fun EnglishLearningApp(
                     }
                 )
             }
-
             composable(AppRoute.SavedWords) {
                 SavedWordsScreen(
                     savedWords = savedWords,
@@ -222,7 +219,6 @@ fun EnglishLearningApp(
                     }
                 )
             }
-
             composable(AppRoute.Practice) {
                 PracticeScreen(
                     savedWords = savedWords,
@@ -243,11 +239,12 @@ fun EnglishLearningApp(
             lookupMode = selectedWord.lookupMode
         )
         val selectedIsSaved = savedWords.any { it.savedKey == selectedSavedKey }
-
         val activeSpeechText by textToSpeech.currentShortSpeechText
+
         DisposableEffect(selectedWord.word, selectedWord.sentence, selectedWord.lookupMode) {
             onDispose { textToSpeech.stopShortSpeech() }
         }
+
         ModalBottomSheet(
             onDismissRequest = {
                 textToSpeech.stopShortSpeech()
@@ -255,8 +252,8 @@ fun EnglishLearningApp(
             },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-            scrimColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
             dragHandle = { BottomSheetHandle() }
         ) {
             MeaningSheet(
@@ -276,7 +273,7 @@ fun EnglishLearningApp(
                     navController.navigateSingleTop(AppRoute.Practice)
                 },
                 onChangeMode = viewModel::setLookupMode,
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp)
             )
         }
     }
@@ -306,11 +303,11 @@ private fun rememberDefaultLocalStore(): ArticleLocalStore {
 }
 
 private object AppRoute {
-    const val Input = "input"
-    const val Reader = "reader"
-    const val Recents = "recents"
+    const val Input     = "input"
+    const val Reader    = "reader"
+    const val Recents   = "recents"
     const val SavedWords = "saved_words"
-    const val Practice = "practice"
+    const val Practice  = "practice"
 }
 
 private val BottomNavRoutes = setOf(
@@ -326,9 +323,9 @@ private data class BottomNavItem(
 )
 
 private val BottomNavItems = listOf(
-    BottomNavItem(AppRoute.Input, "Home", R.drawable.ic_book_a),
-    BottomNavItem(AppRoute.SavedWords, "Saved", R.drawable.ic_bookmark),
-    BottomNavItem(AppRoute.Practice, "Practice", R.drawable.ic_school)
+    BottomNavItem(AppRoute.Input,     "Home",     R.drawable.ic_book_a),
+    BottomNavItem(AppRoute.SavedWords, "Saved",   R.drawable.ic_bookmark),
+    BottomNavItem(AppRoute.Practice,  "Practice", R.drawable.ic_school)
 )
 
 @Composable
@@ -337,7 +334,10 @@ private fun AppBottomNavBar(
     onNavigate: (String) -> Unit
 ) {
     Column {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            thickness = 1.dp
+        )
         NavigationBar(
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp
@@ -357,13 +357,14 @@ private fun AppBottomNavBar(
                     label = {
                         Text(
                             text = item.label,
-                            style = MaterialTheme.typography.labelMedium
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                         )
                     },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedIconColor   = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedTextColor   = MaterialTheme.colorScheme.onSurface,
+                        indicatorColor      = MaterialTheme.colorScheme.primaryContainer,
                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -374,7 +375,5 @@ private fun AppBottomNavBar(
 }
 
 private fun NavHostController.navigateSingleTop(route: String) {
-    navigate(route) {
-        launchSingleTop = true
-    }
+    navigate(route) { launchSingleTop = true }
 }

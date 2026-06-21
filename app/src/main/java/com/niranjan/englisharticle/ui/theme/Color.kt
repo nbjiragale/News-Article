@@ -2,130 +2,61 @@ package com.niranjan.englisharticle.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Reading paper palette ────────────────────────────────────────────────────
-// Quiet, warm-leaning neutrals (inspired by editorial readers like Instapaper /
-// Readwise) with a sage-green primary, sepia secondary, and dusty-plum
-// tertiary accent. The whole scheme is tuned for long reading sessions:
-// ample contrast on body text, low contrast on chrome, no harsh saturation.
+// ── ArthaReader Design System ──────────────────────────────────
+// Emerald accent (#0f7b5a) on crisp white surfaces.
+// Designed to match the ArthaReader Claude Design handoff.
 
-// Paper neutrals (background → containers)
-val Paper50 = Color(0xFFFBF8F3)
-val Paper100 = Color(0xFFF6F1E7)
-val Paper200 = Color(0xFFEFE9DB)
-val Paper300 = Color(0xFFE8E1D0)
-val Paper400 = Color(0xFFE1D9C6)
+// Emerald scale — primary brand colour
+val Emerald900 = Color(0xFF0A3D2E)
+val Emerald800 = Color(0xFF0A5A40)
+val Emerald700 = Color(0xFF0F7B5A)   // primary
+val Emerald600 = Color(0xFF178C68)
+val Emerald400 = Color(0xFF3DAF8A)
+val Emerald200 = Color(0xFFAADEC9)
+val Emerald100 = Color(0xFFCDEBDD)
+val Emerald50  = Color(0xFFEEF5F1)
 
-// Warm charcoal ink (text + strong chrome)
-val Charcoal900 = Color(0xFF1F1D19)
-val Charcoal800 = Color(0xFF26241F)
-val Charcoal700 = Color(0xFF34302A)
-val Charcoal600 = Color(0xFF4A443B)
-val Charcoal500 = Color(0xFF6E665B)
-val Charcoal400 = Color(0xFF8E8676)
-val Charcoal300 = Color(0xFFA89F8E)
-val Charcoal200 = Color(0xFFDBD3C3)
-val Charcoal100 = Color(0xFFEDE7DB)
+// Neutral scale (warm stone undertone to complement emerald)
+val Stone950 = Color(0xFF111614)
+val Stone900 = Color(0xFF16201B)
+val Stone700 = Color(0xFF2F352F)
+val Stone600 = Color(0xFF3B423C)
+val Stone500 = Color(0xFF4A534D)
+val Stone400 = Color(0xFF646A63)
+val Stone300 = Color(0xFF7C837B)
+val Stone200 = Color(0xFFAEB3AD)
+val Stone100 = Color(0xFFDFE5DE)
+val Stone50  = Color(0xFFF3F5F3)
 
-// Sage primary
-val Sage100 = Color(0xFFD9E5D2)
-val Sage300 = Color(0xFF9CC1A0)
-val Sage500 = Color(0xFF4F6E58)
-val Sage700 = Color(0xFF2F4737)
-val Sage900 = Color(0xFF1A2C20)
+// Surface hierarchy
+val SurfaceWhite           = Color(0xFFFFFFFF)
+val SurfaceContainerLowest = Color(0xFFFFFFFF)
+val SurfaceContainerLow    = Color(0xFFF3F5F3)
+val SurfaceContainer       = Color(0xFFEEF0EE)
+val SurfaceContainerHigh   = Color(0xFFE8EBE8)
 
-// Sepia secondary
-val Sepia100 = Color(0xFFEBDDC4)
-val Sepia300 = Color(0xFFD0AE7A)
-val Sepia500 = Color(0xFF8C6B45)
-val Sepia700 = Color(0xFF5A4128)
+// Secondary container — soft emerald tint for cards/chips
+val SecondaryContainer    = Color(0xFFDFEAE4)
+val OnSecondaryContainer  = Color(0xFF2D4038)
 
-// Plum tertiary
-val Plum100 = Color(0xFFEBDCF2)
-val Plum300 = Color(0xFFB99AC7)
-val Plum500 = Color(0xFF7C5A88)
-val Plum700 = Color(0xFF4D3457)
+// Tertiary — plum for idiomatic phrase highlights
+val Plum700 = Color(0xFF7C5A88)
+val Plum200 = Color(0xFFD9B8E8)
+val Plum100 = Color(0xFFEDD9F4)
+val Plum50  = Color(0xFFF7EEF9)
 
-// Semantic
-val SuccessGreen500 = Color(0xFF3F7A5C)
-val SuccessGreen100 = Color(0xFFD9ECDF)
-val WarnAmber500 = Color(0xFFB47B1F)
-val WarnAmber100 = Color(0xFFF4E4C2)
-val DangerRed500 = Color(0xFFB14C42)
-val DangerRed100 = Color(0xFFF4DAD4)
+// Separator / outline
+val OutlineVariant = Color(0xFFDCEAE3)
+val Outline        = Color(0xFFB8C4BC)
 
-// ── Backwards-compatible aliases ─────────────────────────────────────────────
-// Existing screens reference these names directly. They now resolve to the
-// new reading-paper tokens so the whole app picks up the redesign without
-// touching every call site.
+// Error
+val ErrorRed        = Color(0xFFB04A3F)
+val ErrorContainer  = Color(0xFFFBDEDA)
+val OnError         = Color(0xFFFFFFFF)
+val OnErrorContainer = Color(0xFF5C0B0B)
 
-// Legacy "indigo" → sage primary
-val BrandIndigo50 = Sage100
-val BrandIndigo100 = Sage100
-val BrandIndigo200 = Sage300
-val BrandIndigo300 = Sage300
-val BrandIndigo400 = Sage500
-val BrandIndigo500 = Sage500
-val BrandIndigo600 = Sage500
-val BrandIndigo700 = Sage700
-val BrandIndigo800 = Sage700
-val BrandIndigo900 = Sage900
+// Scrim / overlay
+val Scrim = Color(0xFF14201B)
 
-// Legacy "coral" → sepia secondary accent
-val BrandCoral50 = Sepia100
-val BrandCoral100 = Sepia100
-val BrandCoral300 = Sepia300
-val BrandCoral500 = Sepia500
-val BrandCoral700 = Sepia700
-
-// Legacy "plum" → plum tertiary
-val BrandPlum100 = Plum100
-val BrandPlum300 = Plum300
-val BrandPlum500 = Plum500
-val BrandPlum700 = Plum700
-
-// Legacy cream neutrals → paper neutrals
-val Cream50 = Paper50
-val Cream100 = Paper100
-val Cream200 = Paper200
-val Cream300 = Paper300
-
-// Legacy ink → warm charcoal
-val Ink900 = Charcoal900
-val Ink800 = Charcoal800
-val Ink700 = Charcoal700
-val Ink600 = Charcoal600
-val Ink500 = Charcoal500
-val Ink400 = Charcoal400
-val Ink300 = Charcoal300
-val Ink200 = Charcoal200
-val Ink100 = Charcoal100
-
-// Legacy semantic role aliases
-val AppPrimary = Sage500
-val AppOnPrimary = Color.White
-val AppPrimaryContainer = Sage100
-val AppOnPrimaryContainer = Sage700
-val AppSecondary = Sepia500
-val AppSecondaryContainer = Sepia100
-val AppOnSecondaryContainer = Sepia700
-val AppTertiary = Plum500
-val AppSurface = Paper50
-val AppTopBar = Paper50
-val AppSurfaceContainerLowest = Color.White
-val AppSurfaceContainerLow = Paper100
-val AppSurfaceContainer = Paper200
-val AppSurfaceContainerHigh = Paper300
-val AppSurfaceVariant = Paper200
-val AppOnSurface = Charcoal900
-val AppOnSurfaceVariant = Charcoal500
-val AppOutline = Charcoal300
-val AppOutlineVariant = Charcoal200
-val AppError = DangerRed500
-val AppErrorContainer = DangerRed100
-val AppOnErrorContainer = Color(0xFF5A1610)
-
-val AppDarkBackground = Color(0xFF14130F)
-val AppDarkSurface = Color(0xFF1A1814)
-val AppDarkSurfaceVariant = Color(0xFF26241F)
-val AppDarkText = Color(0xFFEDE7DB)
-val AppDarkMuted = Charcoal300
+// Direct alias used in screens (ArticleInputScreen)
+val AppSurfaceContainerLowest = SurfaceContainerLowest

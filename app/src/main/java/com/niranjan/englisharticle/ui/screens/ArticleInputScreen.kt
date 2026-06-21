@@ -1,6 +1,7 @@
 package com.niranjan.englisharticle.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,21 +14,30 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,13 +45,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.theme.AppSurfaceContainerLowest
-import com.niranjan.englisharticle.ui.theme.EnglishArticleTheme
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArticleInputScreen(
     article: String,
@@ -62,155 +71,262 @@ fun ArticleInputScreen(
     onDismissYouTubeError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // 0 = Paste article  |  1 = YouTube
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
         AppTopBar(showBack = false)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            HeroIntro()
-
-            RecentsLink(onOpenRecents = onOpenRecents)
-
-            YouTubeImportCard(
-                url = youTubeUrl,
-                onUrlChange = onYouTubeUrlChange,
-                onImport = onImportYouTube,
-                isImporting = isImportingYouTube,
-                error = youTubeError,
-                onDismissError = onDismissYouTubeError
-            )
-
-            if (cleaningError != null) {
-                ErrorCard(message = cleaningError, onRetry = onRetry, isRetrying = isCleaning)
+            // ── Hero heading ────────────────────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Read English,\nLearn in Kannada.",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Paste an article or a YouTube link. Tap any word for meaning, definition, and an example you can save.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
-            OutlinedTextField(
-                value = article,
-                onValueChange = onArticleChange,
-                modifier = Modifier
-                    .heightIn(min = 220.dp, max = 360.dp)
-                    .fillMaxWidth(),
-                label = { Text("Article text") },
-                minLines = 10,
-                maxLines = 16,
-                placeholder = { Text("Paste a full article — headlines, body, the works.") },
-                shape = RoundedCornerShape(20.dp),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                    focusedContainerColor = AppSurfaceContainerLowest,
-                    unfocusedContainerColor = AppSurfaceContainerLowest,
-                    errorContainerColor = AppSurfaceContainerLowest
-                )
-            )
+            // ── Input card (segmented: Paste / YouTube) ─────────
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Segmented control
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                activeContentColor   = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            icon = {}
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_newspaper),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(end = 2.dp)
+                            )
+                            Text("Paste Article", style = MaterialTheme.typography.labelLarge)
+                        }
+                        SegmentedButton(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                activeContentColor   = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            icon = {}
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_book_a),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(end = 2.dp)
+                            )
+                            Text("YouTube", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
 
-            ActionRow(
-                onLoadArticle = onLoadArticle,
-                onClearArticle = onClearArticle,
-                article = article,
-                isCleaning = isCleaning
-            )
+                    // Tab content
+                    if (selectedTab == 0) {
+                        PasteTabContent(
+                            article = article,
+                            onArticleChange = onArticleChange,
+                            isCleaning = isCleaning,
+                            onLoadArticle = onLoadArticle,
+                            onClearArticle = onClearArticle,
+                            cleaningError = cleaningError,
+                            onRetry = onRetry
+                        )
+                    } else {
+                        YouTubeTabContent(
+                            url = youTubeUrl,
+                            onUrlChange = onYouTubeUrlChange,
+                            onImport = onImportYouTube,
+                            isImporting = isImportingYouTube,
+                            error = youTubeError,
+                            onDismissError = onDismissYouTubeError
+                        )
+                    }
+                }
+            }
+
+            // ── Recent articles shortcut ─────────────────────────
+            Surface(
+                onClick = onOpenRecents,
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_history),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Continue reading",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Pick up where you left off",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_right),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun YouTubeImportCard(
-    url: String,
-    onUrlChange: (String) -> Unit,
-    onImport: () -> Unit,
-    isImporting: Boolean,
-    error: String?,
-    onDismissError: () -> Unit
+private fun PasteTabContent(
+    article: String,
+    onArticleChange: (String) -> Unit,
+    isCleaning: Boolean,
+    onLoadArticle: () -> Unit,
+    onClearArticle: () -> Unit,
+    cleaningError: String?,
+    onRetry: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = "Read a YouTube video",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "Paste a YouTube link to fetch its captions and read the video as an article.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-            )
-            OutlinedTextField(
-                value = url,
-                onValueChange = onUrlChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("YouTube link") },
-                placeholder = { Text("https://www.youtube.com/watch?v=…") },
-                shape = RoundedCornerShape(16.dp),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Go
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                    focusedContainerColor = AppSurfaceContainerLowest,
-                    unfocusedContainerColor = AppSurfaceContainerLowest
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Word count chip
+        if (article.isNotBlank()) {
+            val wordCount = article.trim().split(Regex("\\s+")).size
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                Text(
+                    text = "$wordCount words",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
+            }
+        }
+
+        OutlinedTextField(
+            value = article,
+            onValueChange = onArticleChange,
+            modifier = Modifier
+                .heightIn(min = 180.dp, max = 320.dp)
+                .fillMaxWidth(),
+            placeholder = {
+                Text(
+                    "Paste a full article — headlines, body, the works.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            shape = RoundedCornerShape(16.dp),
+            minLines = 8,
+            maxLines = 14,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor   = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedLabelColor    = MaterialTheme.colorScheme.primary,
+                cursorColor          = MaterialTheme.colorScheme.primary,
+                focusedContainerColor   = AppSurfaceContainerLowest,
+                unfocusedContainerColor = AppSurfaceContainerLowest
             )
-            if (error != null) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    modifier = Modifier.fillMaxWidth()
+        )
+
+        if (cleaningError != null) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = onDismissError) {
-                            Text("Dismiss", style = MaterialTheme.typography.labelMedium)
-                        }
+                    Text(
+                        text = cleaningError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onRetry) {
+                        Text("Retry", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Button(
-                onClick = onImport,
-                enabled = url.isNotBlank() && !isImporting,
+                onClick = onLoadArticle,
+                enabled = article.isNotBlank() && !isCleaning,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(24.dp),
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(26.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    contentColor   = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
-                if (isImporting) {
+                if (isCleaning) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -220,199 +336,130 @@ private fun YouTubeImportCard(
                             color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
-                        Text(
-                            "Fetching transcript",
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                        Text("Preparing…", style = MaterialTheme.typography.labelLarge)
                     }
                 } else {
                     Text(
-                        "Fetch transcript",
+                        "Open Article",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
             }
+
+            if (article.isNotBlank() && !isCleaning) {
+                Surface(
+                    onClick = onClearArticle,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_circle_x),
+                            contentDescription = "Clear",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun HeroIntro() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun YouTubeTabContent(
+    url: String,
+    onUrlChange: (String) -> Unit,
+    onImport: () -> Unit,
+    isImporting: Boolean,
+    error: String?,
+    onDismissError: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "Read English,\nlearn in Kannada.",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "Paste an article or a YouTube link. Tap any word for meaning, definition, and an example you can save.",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "Paste a YouTube link to fetch its captions and read the video as an article.",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
 
-@Composable
-private fun RecentsLink(onOpenRecents: () -> Unit) {
-    Surface(
-        onClick = onOpenRecents,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_history),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Recent articles",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Reopen anything you've read.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                text = "›",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        OutlinedTextField(
+            value = url,
+            onValueChange = onUrlChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("https://www.youtube.com/watch?v=…") },
+            shape = RoundedCornerShape(16.dp),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Go
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor   = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedLabelColor    = MaterialTheme.colorScheme.primary,
+                cursorColor          = MaterialTheme.colorScheme.primary,
+                focusedContainerColor   = AppSurfaceContainerLowest,
+                unfocusedContainerColor = AppSurfaceContainerLowest
             )
-        }
-    }
-}
+        )
 
-@Composable
-private fun ErrorCard(message: String, onRetry: () -> Unit, isRetrying: Boolean) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.errorContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            TextButton(
-                onClick = onRetry,
-                enabled = !isRetrying
+        if (error != null) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Retry", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onDismissError) {
+                        Text("Dismiss", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
         }
-    }
-}
 
-@Composable
-private fun ActionRow(
-    onLoadArticle: () -> Unit,
-    onClearArticle: () -> Unit,
-    article: String,
-    isCleaning: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
         Button(
-            onClick = onLoadArticle,
-            enabled = article.isNotBlank() && !isCleaning,
+            onClick = onImport,
+            enabled = url.isNotBlank() && !isImporting,
             modifier = Modifier
-                .weight(1f)
-                .height(56.dp),
-            shape = RoundedCornerShape(28.dp),
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(26.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor   = MaterialTheme.colorScheme.onPrimary
             )
         ) {
-            if (isCleaning) {
+            if (isImporting) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(16.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp
                     )
-                    Text("Preparing", style = MaterialTheme.typography.titleMedium)
+                    Text("Fetching transcript…", style = MaterialTheme.typography.labelLarge)
                 }
             } else {
-                Text("Open Article", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Surface(
-            onClick = onClearArticle,
-            enabled = article.isNotBlank() && !isCleaning,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_circle_x),
-                    contentDescription = "Clear",
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    "Fetch Transcript",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
     }
-    Spacer(Modifier.size(0.dp))
 }
-
-@Preview(showBackground = true)
-@Composable
-private fun ArticleInputPreview() {
-    EnglishArticleTheme {
-        ArticleInputScreen(
-            article = "",
-            onArticleChange = {},
-            onLoadArticle = {},
-            isCleaning = false,
-            cleaningError = null,
-            onRetry = {},
-            onClearArticle = {},
-            onOpenRecents = {},
-            onOpenSavedWords = {},
-            onOpenPractice = {},
-            youTubeUrl = "",
-            onYouTubeUrlChange = {},
-            onImportYouTube = {},
-            isImportingYouTube = false,
-            youTubeError = null,
-            onDismissYouTubeError = {}
-        )
-    }
-}
-
-
-

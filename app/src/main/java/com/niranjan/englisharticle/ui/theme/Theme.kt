@@ -5,70 +5,92 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 
 private val LightColorScheme = lightColorScheme(
-    primary = Sage500,
-    onPrimary = Color.White,
-    primaryContainer = Sage100,
-    onPrimaryContainer = Sage700,
-    secondary = Sepia500,
-    onSecondary = Color.White,
-    secondaryContainer = Sepia100,
-    onSecondaryContainer = Sepia700,
-    tertiary = Plum500,
-    onTertiary = Color.White,
-    tertiaryContainer = Plum100,
-    onTertiaryContainer = Plum700,
-    background = Paper50,
-    onBackground = Charcoal900,
-    surface = Paper50,
-    onSurface = Charcoal900,
-    surfaceVariant = Paper200,
-    onSurfaceVariant = Charcoal500,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Paper100,
-    surfaceContainer = Paper200,
-    surfaceContainerHigh = Paper300,
-    surfaceContainerHighest = Paper400,
-    outline = Charcoal300,
-    outlineVariant = Charcoal200,
-    error = DangerRed500,
-    onError = Color.White,
-    errorContainer = DangerRed100,
-    onErrorContainer = Color(0xFF5A1610)
+    // ── Primary (emerald) ──────────────────────────────────────
+    primary                = Emerald700,
+    onPrimary              = SurfaceWhite,
+    primaryContainer       = Emerald50,
+    onPrimaryContainer     = Emerald800,
+
+    // ── Secondary (soft emerald tint — cards, chips, toggles) ─
+    secondary              = Emerald600,
+    onSecondary            = SurfaceWhite,
+    secondaryContainer     = SecondaryContainer,
+    onSecondaryContainer   = OnSecondaryContainer,
+
+    // ── Tertiary (plum — idiomatic phrase highlights) ──────────
+    tertiary               = Plum700,
+    onTertiary             = SurfaceWhite,
+    tertiaryContainer      = Plum100,
+    onTertiaryContainer    = Plum700,
+
+    // ── Background / Surface ───────────────────────────────────
+    background             = SurfaceWhite,
+    onBackground           = Stone900,
+    surface                = SurfaceWhite,
+    onSurface              = Stone900,
+    surfaceVariant         = SurfaceContainerLow,
+    onSurfaceVariant       = Stone400,
+
+    // ── Surface container tiers ────────────────────────────────
+    surfaceContainerLowest = SurfaceContainerLowest,
+    surfaceContainerLow    = SurfaceContainerLow,
+    surfaceContainer       = SurfaceContainer,
+    surfaceContainerHigh   = SurfaceContainerHigh,
+    surfaceContainerHighest = Stone50,
+
+    // ── Inverse ───────────────────────────────────────────────
+    inverseSurface         = Stone900,
+    inverseOnSurface       = Stone50,
+    inversePrimary         = Emerald200,
+
+    // ── Outline ───────────────────────────────────────────────
+    outline                = Outline,
+    outlineVariant         = OutlineVariant,
+
+    // ── Error ─────────────────────────────────────────────────
+    error                  = ErrorRed,
+    onError                = OnError,
+    errorContainer         = ErrorContainer,
+    onErrorContainer       = OnErrorContainer,
+
+    // ── Scrim ─────────────────────────────────────────────────
+    scrim                  = Scrim,
 )
 
+// Dark scheme keeps the same emerald logic on dark stone surfaces.
+// Currently ArthaReader ships light-only; dark kept for system compat.
 private val DarkColorScheme = darkColorScheme(
-    primary = Sage300,
-    onPrimary = Sage900,
-    primaryContainer = Sage700,
-    onPrimaryContainer = Sage100,
-    secondary = Sepia300,
-    onSecondary = Sepia700,
-    secondaryContainer = Sepia700,
-    onSecondaryContainer = Sepia100,
-    tertiary = Plum300,
-    onTertiary = Plum700,
-    tertiaryContainer = Plum700,
-    onTertiaryContainer = Plum100,
-    background = AppDarkBackground,
-    onBackground = AppDarkText,
-    surface = AppDarkBackground,
-    onSurface = AppDarkText,
-    surfaceVariant = AppDarkSurfaceVariant,
-    onSurfaceVariant = Charcoal300,
-    surfaceContainerLowest = AppDarkBackground,
-    surfaceContainerLow = AppDarkSurface,
-    surfaceContainer = AppDarkSurface,
-    surfaceContainerHigh = AppDarkSurfaceVariant,
-    surfaceContainerHighest = Charcoal700,
-    outline = Charcoal400,
-    outlineVariant = Charcoal700,
-    error = DangerRed500,
-    onError = Color.White,
-    errorContainer = Color(0xFF6B221A),
-    onErrorContainer = DangerRed100
+    primary                = Emerald400,
+    onPrimary              = Emerald900,
+    primaryContainer       = Emerald800,
+    onPrimaryContainer     = Emerald50,
+
+    secondary              = Emerald200,
+    onSecondary            = Emerald900,
+    secondaryContainer     = Emerald800,
+    onSecondaryContainer   = Emerald100,
+
+    tertiary               = Plum200,
+    onTertiary             = Stone950,
+    tertiaryContainer      = Plum700,
+    onTertiaryContainer    = Plum100,
+
+    background             = Stone950,
+    onBackground           = Stone50,
+    surface                = Stone950,
+    onSurface              = Stone50,
+    surfaceVariant         = Stone900,
+    onSurfaceVariant       = Stone200,
+
+    outline                = Stone500,
+    outlineVariant         = Stone700,
+
+    error                  = ErrorRed,
+    onError                = OnError,
+    errorContainer         = Color(0xFF5C0B0B),
+    onErrorContainer       = ErrorContainer,
 )
 
 @Composable
@@ -80,8 +102,8 @@ fun EnglishArticleTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
-        shapes = AppShapes,
-        content = content
+        typography   = AppTypography,
+        shapes       = AppShapes,
+        content      = content
     )
 }

@@ -5,10 +5,14 @@
 **Stack:** Kotlin 2.0.21 · Jetpack Compose (BOM 2024.09.00) · Room 2.8.4 · KSP · `HttpURLConnection` · OpenRouter + Deepgram.
 
 > **Status update.** This document is a point-in-time assessment of `9d6a80d`. Action-plan
-> items **C1–C4 have since been fixed** (missing arrow drawables added, duplicate
+> items **C1–C5 have since been fixed** (missing arrow drawables added, duplicate
 > `AppTopBar`/`BottomSheetHandle` removed, CI workflow added, fabricated progress UI
-> removed). The findings below are left as written so the analysis stays traceable; see
-> §10.1 for which items are now closed. Everything from C5 onward is still open.
+> removed, R8 + resource shrinking + release signing enabled). CI also surfaced two
+> defects this review missed — `gradlew` committed non-executable, and a missing `Color`
+> import in `Theme.kt` (§2.2b). The findings below are left as written so the analysis
+> stays traceable; see §10.1 for which items are now closed. **C6 and everything after it
+> is still open** — most importantly the decision in C6 about whether the API keys
+> embedded in the APK are an accepted risk or a hard blocker (§3.1, §10.5).
 
 > This review assumes the goal stated in the README ("an Android app for contextual
 > English learning") rather than the PRD's "single user, personal use, not publishing to
@@ -1390,8 +1394,8 @@ Remaining:
 | Severity | Finding | Location | Recommendation |
 |---|---|---|---|
 | 🔴 **Critical** | OpenRouter + Deepgram API keys as `BuildConfig` string constants, extractable from the APK in seconds | `build.gradle.kts:32-56` | Backend proxy (§3.1). Interim: hard spend caps + `isMinifyEnabled = true` + do not distribute. |
-| 🔴 **Critical** | `isMinifyEnabled = false` in release — no R8, no obfuscation, no shrinking | `build.gradle.kts:60` | `isMinifyEnabled = true; isShrinkResources = true`. Verify with a release smoke test; add keep rules for Room entities if needed. |
-| 🟠 High | No release signing config — release builds are unsigned/debug-signed | `build.gradle.kts:58-66` | Add a `signingConfigs` block reading from a keystore + env vars (never committed). |
+| ~~🔴 Critical~~ ✅ | `isMinifyEnabled = false` in release — no R8, no obfuscation, no shrinking | `build.gradle.kts:60` | **Fixed.** `isMinifyEnabled` and `isShrinkResources` both true. Keep rules added for enum `valueOf()` (persisted in Room as TEXT) and Room entity members; `SourceFile`/`LineNumberTable` retained so release stack traces stay readable. CI runs `assembleRelease`, so R8 is exercised on every PR. |
+| ~~🟠 High~~ ✅ | No release signing config — release builds are unsigned/debug-signed | `build.gradle.kts:58-66` | **Fixed.** `signingConfigs` reads `keystore.properties` (git-ignored) or `ANDROID_KEYSTORE_*` env vars, and is only declared when all four values are present so `assembleRelease` still succeeds unsigned on CI. `keystore.properties`, `*.jks`, `*.keystore` added to `.gitignore`. |
 | 🟠 High | `allowBackup="true"` with template rules — reading history syncs to Google Drive | `AndroidManifest.xml:9`, `res/xml/*.xml` | Exclude the database from cloud backup (§3.11). |
 | 🟠 High | No certificate pinning on either provider | all three network services | With OkHttp: `CertificatePinner.Builder().add("openrouter.ai", "sha256/…")`. Pin with a backup pin and a rotation plan. |
 | 🟡 Medium | `ACTION_PROCESS_TEXT` / `ACTION_SEND` accept unbounded, untrusted text and resolve arbitrary `content://` URIs on the main thread | `MainActivity.kt:94-103` | Cap length, move to `Dispatchers.IO`, and do not follow `item.uri` (§3.12). |
@@ -1478,7 +1482,7 @@ jobs:
 | C2c | Restore `gradlew` to mode `100755` | — | 5 min | ✅ **Done** — committed as `100644` since repo creation; only surfaced once CI ran `./gradlew` on Linux |
 | C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h | ✅ **Done** — `.github/workflows/android.yml` runs assemble + unit tests + lint on every PR |
 | C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min | ✅ **Done** — removed, with a comment explaining why it isn't coming back until a real read position is persisted |
-| C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h |
+| C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h | ✅ **Done** — signing reads env vars or git-ignored `keystore.properties` and stays unsigned when absent; CI now runs `assembleRelease` so R8 is actually exercised |
 | C6 | Decide the distribution model. If distributed → put a proxy in front of both providers. If personal-only → set hard spend caps, state it in the README, and treat C6 as accepted risk. | §3.1, §4.1 | 1–3 d |
 
 ### 10.2 🟠 High priority (before real users)

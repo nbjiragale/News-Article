@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Release signing material. Committing any of these hands out the ability to
+# publish updates under this app's identity.
+keystore.properties
+*.jks
+*.keystore

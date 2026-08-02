@@ -48,6 +48,22 @@ jobs:
       - name: Android Lint
         run: ./gradlew lintDebug --stacktrace
 
+      # R8 only runs on release builds, so a debug-only pipeline cannot tell us
+      # whether minification breaks the app. No keystore is configured on CI, so
+      # this produces an unsigned APK -- which is all we need to exercise
+      # shrinking, obfuscation and resource shrinking.
+      - name: Assemble release (exercises R8)
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload R8 mapping
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping
+          path: app/build/outputs/mapping/release/
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4

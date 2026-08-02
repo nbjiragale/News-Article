@@ -4,6 +4,12 @@
 **Scope:** entire repository — 54 Kotlin source files, ~8,900 LOC, single Gradle module.
 **Stack:** Kotlin 2.0.21 · Jetpack Compose (BOM 2024.09.00) · Room 2.8.4 · KSP · `HttpURLConnection` · OpenRouter + Deepgram.
 
+> **Status update.** This document is a point-in-time assessment of `9d6a80d`. Action-plan
+> items **C1–C4 have since been fixed** (missing arrow drawables added, duplicate
+> `AppTopBar`/`BottomSheetHandle` removed, CI workflow added, fabricated progress UI
+> removed). The findings below are left as written so the analysis stays traceable; see
+> §10.1 for which items are now closed. Everything from C5 onward is still open.
+
 > This review assumes the goal stated in the README ("an Android app for contextual
 > English learning") rather than the PRD's "single user, personal use, not publishing to
 > Play Store". Where the two conflict, findings are graded against the README's ambition,
@@ -1431,12 +1437,12 @@ jobs:
 
 ### 10.1 🔴 Critical — fix immediately (blocks any release)
 
-| # | Action | Ref | Effort |
-|---|---|---|---|
-| C1 | Add `ic_arrow_left.xml` / `ic_arrow_right.xml`, or repoint to `ic_move_left` | §2.1 | 15 min |
-| C2 | Delete `AppTopBar` + `BottomSheetHandle` from `ArticleChrome.kt`; keep `AppTopBar.kt` | §2.2 | 30 min |
-| C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h |
-| C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min |
+| # | Action | Ref | Effort | Status |
+|---|---|---|---|---|
+| C1 | Add `ic_arrow_left.xml` / `ic_arrow_right.xml`, or repoint to `ic_move_left` | §2.1 | 15 min | ✅ **Done** — both added as Lucide-style strokes with `autoMirrored` for RTL |
+| C2 | Delete `AppTopBar` + `BottomSheetHandle` from `ArticleChrome.kt`; keep `AppTopBar.kt` | §2.2 | 30 min | ✅ **Done** — file renamed to `ArticleHeader.kt`; dead `interactiveWordUnderline` also removed |
+| C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h | ✅ **Done** — `.github/workflows/android.yml` runs assemble + unit tests + lint on every PR |
+| C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min | ✅ **Done** — removed, with a comment explaining why it isn't coming back until a real read position is persisted |
 | C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h |
 | C6 | Decide the distribution model. If distributed → put a proxy in front of both providers. If personal-only → set hard spend caps, state it in the README, and treat C6 as accepted risk. | §3.1, §4.1 | 1–3 d |
 

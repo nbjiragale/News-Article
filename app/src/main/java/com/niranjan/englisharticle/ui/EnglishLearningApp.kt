@@ -206,7 +206,11 @@ fun EnglishLearningApp(
                     onOpenArticle = { recentArticle ->
                         viewModel.openRecentArticle(recentArticle)
                         navController.navigateSingleTop(AppRoute.Reader)
-                    }
+                    },
+                    onDeleteArticle = { recentArticle ->
+                        viewModel.deleteRecentArticle(recentArticle.id)
+                    },
+                    onClearAll = viewModel::clearRecentArticles
                 )
             }
             composable(AppRoute.SavedWords) {

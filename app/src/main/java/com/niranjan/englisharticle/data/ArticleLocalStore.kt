@@ -14,6 +14,10 @@ interface ArticleLocalStore {
 
     suspend fun saveRecentArticle(article: CleanArticleResult): Long
 
+    suspend fun deleteRecentArticle(id: Long)
+
+    suspend fun clearRecentArticles()
+
     suspend fun getMeaning(word: String, sentence: String, lookupMode: MeaningLookupMode): MeaningResult?
 
     suspend fun saveMeaning(

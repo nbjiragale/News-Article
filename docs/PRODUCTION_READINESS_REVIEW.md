@@ -4,6 +4,29 @@
 **Scope:** entire repository — 54 Kotlin source files, ~8,900 LOC, single Gradle module.
 **Stack:** Kotlin 2.0.21 · Jetpack Compose (BOM 2024.09.00) · Room 2.8.4 · KSP · `HttpURLConnection` · OpenRouter + Deepgram.
 
+> **Status update.** This document is a point-in-time assessment of `9d6a80d`. **All six
+> Critical items (C1–C6) are now closed.** C1–C5 were fixed in code (arrow drawables
+> added, duplicate `AppTopBar`/`BottomSheetHandle` removed, CI added, fabricated progress
+> UI removed, R8 + resource shrinking + release signing enabled). CI also surfaced two
+> defects this review missed — `gradlew` committed non-executable, and a missing `Color`
+> import in `Theme.kt` (§2.2b).
+>
+> **C6 was decided, not engineered: ArthaReader is personal-use software.** The owner has
+> confirmed the PRD's framing governs — single user, not distributed, Play Store out of
+> scope. The embedded API keys (§3.1) are therefore an **accepted risk**, bounded by
+> provider-side spend caps and a client-side input-size guard, and documented in the
+> README's Distribution section. This closes C6 and reclassifies **H7 (crash reporting)**
+> and **M15 (certificate pinning)** as Nice-to-have, per §10.5.
+>
+> **Re-graded under that framing: production readiness 6/10** (from 2/10). The app builds,
+> CI gates every change, release output is shrunk and signable, and no UI lies to the
+> user. What holds it below 7 is the still-open High tier — chiefly H1 (duplicate history
+> rows), H2 (no way to delete history), H3 (per-tap LLM cost), H4 (dark mode), H5
+> (accessibility) and H6 (state lost on rotation).
+>
+> Findings below are left as originally written so the analysis stays traceable; §10.1
+> tracks what is closed.
+
 > This review assumes the goal stated in the README ("an Android app for contextual
 > English learning") rather than the PRD's "single user, personal use, not publishing to
 > Play Store". Where the two conflict, findings are graded against the README's ambition,
@@ -47,10 +70,17 @@ These are genuinely well done and should not be refactored away:
 
 ### 1.2 Biggest weaknesses
 
-1. **The app does not compile.** Two drawables are referenced and do not exist, and two
-   `@Composable` functions are declared twice in the same package. Both were introduced
-   by the same commit (`cbc4380`, "Apply ArthaReader emerald redesign") and merged to
-   `main` in `9d6a80d`. Nothing in the repo would have caught this — there is no CI.
+1. **The app does not compile.** Three separate defects, all introduced by the same commit
+   (`cbc4380`, "Apply ArthaReader emerald redesign") and merged to `main` in `9d6a80d`:
+   two drawables are referenced and do not exist (§2.1); two `@Composable` functions are
+   declared twice in the same package (§2.2); and `Theme.kt` uses `Color(0xFF5C0B0B)`
+   without importing `androidx.compose.ui.graphics.Color` (§2.2b). Nothing in the repo
+   would have caught any of them — there is no CI.
+
+   > The third was found by the compiler, not by this review — it surfaced on the first
+   > green-path CI run. It is a fair illustration of the review's own limits: §2.4 quotes
+   > that exact line while discussing dark mode and still did not check the file's
+   > imports. Static reading is not a substitute for a build.
 2. **API keys ship inside the APK.** `BuildConfig` string fields are plaintext constants
    in `classes.dex`. `isMinifyEnabled = false` for release. Anyone with `apktool` has
    your OpenRouter and Deepgram billing.
@@ -162,6 +192,32 @@ That is also why §2.1's missing icon went unnoticed: the *other* `AppTopBar` us
 `ArticleHeader.kt`). Keep the newer `AppTopBar.kt` as the single source of truth. Then
 delete the no-op `Modifier.interactiveWordUnderline` (`ArticleChrome.kt:258`), which
 returns `this` unchanged in both branches.
+
+### 2.2b 🔴 CRITICAL — `Theme.kt` uses `Color` without importing it
+
+**Where:** `ui/theme/Theme.kt:92`
+
+```kotlin
+errorContainer         = Color(0xFF5C0B0B),   // in DarkColorScheme
+```
+
+The file imports `isSystemInDarkTheme`, `MaterialTheme`, `darkColorScheme`,
+`lightColorScheme` and `Composable` — but not `androidx.compose.ui.graphics.Color`.
+Every other colour in both schemes is a named token from `Color.kt` (which is same-package,
+so needs no import); this one raw hex literal is the only direct `Color(...)` call, and it
+does not resolve.
+
+```
+e: ui/theme/Theme.kt:92:30 Unresolved reference 'Color'.
+```
+
+**Impact:** `:app:compileDebugKotlin` fails. Same blast radius as §2.1 and §2.2 — no
+artifact.
+
+**Fix:** Add the missing import. Longer term this line should use a named token like the
+rest of the file; that is folded into the dark-scheme work in §2.4 (H4), since
+`0xFF5C0B0B` is already declared in `Color.kt` as `OnErrorContainer` and the duplication
+is the real smell.
 
 ### 2.3 🔴 CRITICAL — Fabricated reading-progress UI
 
@@ -1350,9 +1406,9 @@ Remaining:
 
 | Severity | Finding | Location | Recommendation |
 |---|---|---|---|
-| 🔴 **Critical** | OpenRouter + Deepgram API keys as `BuildConfig` string constants, extractable from the APK in seconds | `build.gradle.kts:32-56` | Backend proxy (§3.1). Interim: hard spend caps + `isMinifyEnabled = true` + do not distribute. |
-| 🔴 **Critical** | `isMinifyEnabled = false` in release — no R8, no obfuscation, no shrinking | `build.gradle.kts:60` | `isMinifyEnabled = true; isShrinkResources = true`. Verify with a release smoke test; add keep rules for Room entities if needed. |
-| 🟠 High | No release signing config — release builds are unsigned/debug-signed | `build.gradle.kts:58-66` | Add a `signingConfigs` block reading from a keystore + env vars (never committed). |
+| ~~🔴 Critical~~ ⚠️ **Accepted** | OpenRouter + Deepgram API keys as `BuildConfig` string constants, extractable from the APK | `build.gradle.kts:32-56` | **Accepted risk (C6).** ArthaReader is personal-use software; the owner confirmed the PRD framing. R8 is now on, which raises extraction cost without eliminating it — obfuscation is not encryption. Mitigated by provider-side spend caps, a 100k-char input guard, and an explicit non-distribution notice in the README. **Re-opens the moment the app is shared with anyone**, at which point §3.1's proxy is mandatory, not optional. |
+| ~~🔴 Critical~~ ✅ | `isMinifyEnabled = false` in release — no R8, no obfuscation, no shrinking | `build.gradle.kts:60` | **Fixed.** `isMinifyEnabled` and `isShrinkResources` both true. Keep rules added for enum `valueOf()` (persisted in Room as TEXT) and Room entity members; `SourceFile`/`LineNumberTable` retained so release stack traces stay readable. CI runs `assembleRelease`, so R8 is exercised on every PR. |
+| ~~🟠 High~~ ✅ | No release signing config — release builds are unsigned/debug-signed | `build.gradle.kts:58-66` | **Fixed.** `signingConfigs` reads `keystore.properties` (git-ignored) or `ANDROID_KEYSTORE_*` env vars, and is only declared when all four values are present so `assembleRelease` still succeeds unsigned on CI. `keystore.properties`, `*.jks`, `*.keystore` added to `.gitignore`. |
 | 🟠 High | `allowBackup="true"` with template rules — reading history syncs to Google Drive | `AndroidManifest.xml:9`, `res/xml/*.xml` | Exclude the database from cloud backup (§3.11). |
 | 🟠 High | No certificate pinning on either provider | all three network services | With OkHttp: `CertificatePinner.Builder().add("openrouter.ai", "sha256/…")`. Pin with a backup pin and a rotation plan. |
 | 🟡 Medium | `ACTION_PROCESS_TEXT` / `ACTION_SEND` accept unbounded, untrusted text and resolve arbitrary `content://` URIs on the main thread | `MainActivity.kt:94-103` | Cap length, move to `Dispatchers.IO`, and do not follow `item.uri` (§3.12). |
@@ -1431,14 +1487,16 @@ jobs:
 
 ### 10.1 🔴 Critical — fix immediately (blocks any release)
 
-| # | Action | Ref | Effort |
-|---|---|---|---|
-| C1 | Add `ic_arrow_left.xml` / `ic_arrow_right.xml`, or repoint to `ic_move_left` | §2.1 | 15 min |
-| C2 | Delete `AppTopBar` + `BottomSheetHandle` from `ArticleChrome.kt`; keep `AppTopBar.kt` | §2.2 | 30 min |
-| C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h |
-| C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min |
-| C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h |
-| C6 | Decide the distribution model. If distributed → put a proxy in front of both providers. If personal-only → set hard spend caps, state it in the README, and treat C6 as accepted risk. | §3.1, §4.1 | 1–3 d |
+| # | Action | Ref | Effort | Status |
+|---|---|---|---|---|
+| C1 | Add `ic_arrow_left.xml` / `ic_arrow_right.xml`, or repoint to `ic_move_left` | §2.1 | 15 min | ✅ **Done** — both added as Lucide-style strokes with `autoMirrored` for RTL |
+| C2 | Delete `AppTopBar` + `BottomSheetHandle` from `ArticleChrome.kt`; keep `AppTopBar.kt` | §2.2 | 30 min | ✅ **Done** — file renamed to `ArticleHeader.kt`; dead `interactiveWordUnderline` also removed |
+| C2b | Add the missing `androidx.compose.ui.graphics.Color` import to `Theme.kt` | §2.2b | 5 min | ✅ **Done** — found by CI, not by this review |
+| C2c | Restore `gradlew` to mode `100755` | — | 5 min | ✅ **Done** — committed as `100644` since repo creation; only surfaced once CI ran `./gradlew` on Linux |
+| C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h | ✅ **Done** — `.github/workflows/android.yml` runs assemble + unit tests + lint on every PR |
+| C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min | ✅ **Done** — removed, with a comment explaining why it isn't coming back until a real read position is persisted |
+| C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h | ✅ **Done** — signing reads env vars or git-ignored `keystore.properties` and stays unsigned when absent; CI now runs `assembleRelease` so R8 is actually exercised |
+| C6 | Decide the distribution model. If distributed → put a proxy in front of both providers. If personal-only → set hard spend caps, state it in the README, and treat C6 as accepted risk. | §3.1, §4.1 | 1–3 d | ✅ **Decided: personal-use only.** Embedded keys accepted as risk. README gained a Distribution section stating the APK must not be shared and why; a 100k-character input guard bounds single-paste cost; provider-side spend caps are the owner's to set (external dashboards). Reclassifies H7 and M15 to Nice-to-have. |
 
 ### 10.2 🟠 High priority (before real users)
 

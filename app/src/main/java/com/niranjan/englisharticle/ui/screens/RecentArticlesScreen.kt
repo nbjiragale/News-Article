@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -151,19 +150,9 @@ private fun RecentArticleCard(article: RecentArticle, onClick: () -> Unit) {
                 maxLines = 3
             )
 
-            // Reading progress indicator
-            LinearProgressIndicator(
-                progress = { 0.4f },  // TODO: wire up real progress from domain model
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
-
-            Text(
-                text = "40% read",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // No reading-progress indicator here on purpose. RecentArticle carries no
+            // read position yet, so anything shown would be invented. Restore this once
+            // the entity persists a real last-read offset.
         }
     }
 }

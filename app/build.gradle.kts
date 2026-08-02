@@ -16,6 +16,19 @@ val localProperties = Properties().apply {
 
 fun String.asBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
+// Release signing material. Never commit it: keystore.properties and *.jks/*.keystore
+// are git-ignored. Local builds read keystore.properties; CI reads environment variables.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun signingValue(propertyKey: String, environmentKey: String): String? =
+    (keystoreProperties.getProperty(propertyKey) ?: System.getenv(environmentKey))
+        ?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.niranjan.englisharticle"
     compileSdk = 36
@@ -55,13 +68,39 @@ android {
         )
     }
 
+    signingConfigs {
+        // Locals are deliberately prefixed: inside create("release") { } an unprefixed
+        // `storePassword` would resolve to the SigningConfig property, not the local,
+        // silently self-assigning.
+        val ksStoreFile = signingValue("storeFile", "ANDROID_KEYSTORE_FILE")
+        val ksStorePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+        val ksKeyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+        val ksKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
+
+        // Only declared when every value is present, so `assembleRelease` still works
+        // unsigned (on CI, or before a keystore exists) instead of failing to configure.
+        if (ksStoreFile != null && ksStorePassword != null &&
+            ksKeyAlias != null && ksKeyPassword != null
+        ) {
+            create("release") {
+                storeFile = file(ksStoreFile)
+                storePassword = ksStorePassword
+                keyAlias = ksKeyAlias
+                keyPassword = ksKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Null when no keystore is configured; AGP then emits an unsigned APK.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {

@@ -156,6 +156,16 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
+            if (transcript.transcript.length > MAX_ARTICLE_CHARS) {
+                _uiState.update {
+                    it.copy(
+                        isImportingYouTube = false,
+                        youTubeError = tooLongMessage(transcript.transcript.length)
+                    )
+                }
+                return@launch
+            }
+
             val resolved = CleanArticleResult(
                 title = transcript.title,
                 subtitle = "",
@@ -399,6 +409,10 @@ class EnglishLearningViewModel(
     private fun cleanRawArticle(rawText: String) {
         val rawArticle = rawText.trim()
         if (rawArticle.isBlank()) return
+        if (rawArticle.length > MAX_ARTICLE_CHARS) {
+            _uiState.update { it.copy(cleaningError = tooLongMessage(rawArticle.length)) }
+            return
+        }
 
         articleCleaningJob?.cancel()
         meaningLookupJob?.cancel()
@@ -474,6 +488,34 @@ class EnglishLearningViewModel(
             runCatching { localStore.saveRecentArticle(articleToSave) }
         }
     }
+}
+
+/**
+ * Upper bound on text accepted into the reader, applied to both pasted articles
+ * and imported YouTube transcripts.
+ *
+ * This is a cost guard, not a technical limit. The app ships its own OpenRouter
+ * and Deepgram keys (see the Distribution section of the README), so every
+ * request is billed to the person who built it, and article length drives the
+ * bill directly: cleaning echoes the body back, and summarizing and phrase
+ * extraction each send it whole. Without a ceiling, one stray paste of a very
+ * large document is an unbounded charge with no warning.
+ *
+ * 100k characters is roughly 15,000 words -- longer than any news article and
+ * long enough for a feature-length YouTube transcript, so it should never bite
+ * in normal use.
+ *
+ * Note this bounds per-article cost only. Per-tap cost is a separate problem:
+ * word lookup currently sends the entire article as context on every tap. That
+ * is tracked as H3 in docs/PRODUCTION_READINESS_REVIEW.md.
+ */
+private const val MAX_ARTICLE_CHARS = 100_000
+
+private fun tooLongMessage(actualLength: Int): String {
+    val actualK = actualLength / 1_000
+    val maxK = MAX_ARTICLE_CHARS / 1_000
+    return "That text is too long to process (${actualK}k characters; the limit is ${maxK}k). " +
+        "Try a single article rather than a whole page."
 }
 
 class EnglishLearningViewModelFactory(

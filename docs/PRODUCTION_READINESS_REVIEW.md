@@ -53,10 +53,17 @@ These are genuinely well done and should not be refactored away:
 
 ### 1.2 Biggest weaknesses
 
-1. **The app does not compile.** Two drawables are referenced and do not exist, and two
-   `@Composable` functions are declared twice in the same package. Both were introduced
-   by the same commit (`cbc4380`, "Apply ArthaReader emerald redesign") and merged to
-   `main` in `9d6a80d`. Nothing in the repo would have caught this — there is no CI.
+1. **The app does not compile.** Three separate defects, all introduced by the same commit
+   (`cbc4380`, "Apply ArthaReader emerald redesign") and merged to `main` in `9d6a80d`:
+   two drawables are referenced and do not exist (§2.1); two `@Composable` functions are
+   declared twice in the same package (§2.2); and `Theme.kt` uses `Color(0xFF5C0B0B)`
+   without importing `androidx.compose.ui.graphics.Color` (§2.2b). Nothing in the repo
+   would have caught any of them — there is no CI.
+
+   > The third was found by the compiler, not by this review — it surfaced on the first
+   > green-path CI run. It is a fair illustration of the review's own limits: §2.4 quotes
+   > that exact line while discussing dark mode and still did not check the file's
+   > imports. Static reading is not a substitute for a build.
 2. **API keys ship inside the APK.** `BuildConfig` string fields are plaintext constants
    in `classes.dex`. `isMinifyEnabled = false` for release. Anyone with `apktool` has
    your OpenRouter and Deepgram billing.
@@ -168,6 +175,32 @@ That is also why §2.1's missing icon went unnoticed: the *other* `AppTopBar` us
 `ArticleHeader.kt`). Keep the newer `AppTopBar.kt` as the single source of truth. Then
 delete the no-op `Modifier.interactiveWordUnderline` (`ArticleChrome.kt:258`), which
 returns `this` unchanged in both branches.
+
+### 2.2b 🔴 CRITICAL — `Theme.kt` uses `Color` without importing it
+
+**Where:** `ui/theme/Theme.kt:92`
+
+```kotlin
+errorContainer         = Color(0xFF5C0B0B),   // in DarkColorScheme
+```
+
+The file imports `isSystemInDarkTheme`, `MaterialTheme`, `darkColorScheme`,
+`lightColorScheme` and `Composable` — but not `androidx.compose.ui.graphics.Color`.
+Every other colour in both schemes is a named token from `Color.kt` (which is same-package,
+so needs no import); this one raw hex literal is the only direct `Color(...)` call, and it
+does not resolve.
+
+```
+e: ui/theme/Theme.kt:92:30 Unresolved reference 'Color'.
+```
+
+**Impact:** `:app:compileDebugKotlin` fails. Same blast radius as §2.1 and §2.2 — no
+artifact.
+
+**Fix:** Add the missing import. Longer term this line should use a named token like the
+rest of the file; that is folded into the dark-scheme work in §2.4 (H4), since
+`0xFF5C0B0B` is already declared in `Color.kt` as `OnErrorContainer` and the duplication
+is the real smell.
 
 ### 2.3 🔴 CRITICAL — Fabricated reading-progress UI
 
@@ -1441,6 +1474,8 @@ jobs:
 |---|---|---|---|---|
 | C1 | Add `ic_arrow_left.xml` / `ic_arrow_right.xml`, or repoint to `ic_move_left` | §2.1 | 15 min | ✅ **Done** — both added as Lucide-style strokes with `autoMirrored` for RTL |
 | C2 | Delete `AppTopBar` + `BottomSheetHandle` from `ArticleChrome.kt`; keep `AppTopBar.kt` | §2.2 | 30 min | ✅ **Done** — file renamed to `ArticleHeader.kt`; dead `interactiveWordUnderline` also removed |
+| C2b | Add the missing `androidx.compose.ui.graphics.Color` import to `Theme.kt` | §2.2b | 5 min | ✅ **Done** — found by CI, not by this review |
+| C2c | Restore `gradlew` to mode `100755` | — | 5 min | ✅ **Done** — committed as `100644` since repo creation; only surfaced once CI ran `./gradlew` on Linux |
 | C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h | ✅ **Done** — `.github/workflows/android.yml` runs assemble + unit tests + lint on every PR |
 | C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min | ✅ **Done** — removed, with a comment explaining why it isn't coming back until a real read position is persisted |
 | C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h |

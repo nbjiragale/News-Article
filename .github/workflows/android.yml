@@ -31,6 +31,12 @@ jobs:
       - name: Create empty local.properties
         run: touch local.properties
 
+      # Defensive: gradlew was committed as mode 100644 and is restored to 100755
+      # in this commit. Re-adding it from a Windows checkout can drop the bit again,
+      # which fails the build with a bare "Permission denied" (exit 126).
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+
       - name: Assemble debug
         run: ./gradlew assembleDebug --stacktrace
 

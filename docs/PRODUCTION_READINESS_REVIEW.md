@@ -4,15 +4,28 @@
 **Scope:** entire repository — 54 Kotlin source files, ~8,900 LOC, single Gradle module.
 **Stack:** Kotlin 2.0.21 · Jetpack Compose (BOM 2024.09.00) · Room 2.8.4 · KSP · `HttpURLConnection` · OpenRouter + Deepgram.
 
-> **Status update.** This document is a point-in-time assessment of `9d6a80d`. Action-plan
-> items **C1–C5 have since been fixed** (missing arrow drawables added, duplicate
-> `AppTopBar`/`BottomSheetHandle` removed, CI workflow added, fabricated progress UI
-> removed, R8 + resource shrinking + release signing enabled). CI also surfaced two
+> **Status update.** This document is a point-in-time assessment of `9d6a80d`. **All six
+> Critical items (C1–C6) are now closed.** C1–C5 were fixed in code (arrow drawables
+> added, duplicate `AppTopBar`/`BottomSheetHandle` removed, CI added, fabricated progress
+> UI removed, R8 + resource shrinking + release signing enabled). CI also surfaced two
 > defects this review missed — `gradlew` committed non-executable, and a missing `Color`
-> import in `Theme.kt` (§2.2b). The findings below are left as written so the analysis
-> stays traceable; see §10.1 for which items are now closed. **C6 and everything after it
-> is still open** — most importantly the decision in C6 about whether the API keys
-> embedded in the APK are an accepted risk or a hard blocker (§3.1, §10.5).
+> import in `Theme.kt` (§2.2b).
+>
+> **C6 was decided, not engineered: ArthaReader is personal-use software.** The owner has
+> confirmed the PRD's framing governs — single user, not distributed, Play Store out of
+> scope. The embedded API keys (§3.1) are therefore an **accepted risk**, bounded by
+> provider-side spend caps and a client-side input-size guard, and documented in the
+> README's Distribution section. This closes C6 and reclassifies **H7 (crash reporting)**
+> and **M15 (certificate pinning)** as Nice-to-have, per §10.5.
+>
+> **Re-graded under that framing: production readiness 6/10** (from 2/10). The app builds,
+> CI gates every change, release output is shrunk and signable, and no UI lies to the
+> user. What holds it below 7 is the still-open High tier — chiefly H1 (duplicate history
+> rows), H2 (no way to delete history), H3 (per-tap LLM cost), H4 (dark mode), H5
+> (accessibility) and H6 (state lost on rotation).
+>
+> Findings below are left as originally written so the analysis stays traceable; §10.1
+> tracks what is closed.
 
 > This review assumes the goal stated in the README ("an Android app for contextual
 > English learning") rather than the PRD's "single user, personal use, not publishing to
@@ -1393,7 +1406,7 @@ Remaining:
 
 | Severity | Finding | Location | Recommendation |
 |---|---|---|---|
-| 🔴 **Critical** | OpenRouter + Deepgram API keys as `BuildConfig` string constants, extractable from the APK in seconds | `build.gradle.kts:32-56` | Backend proxy (§3.1). Interim: hard spend caps + `isMinifyEnabled = true` + do not distribute. |
+| ~~🔴 Critical~~ ⚠️ **Accepted** | OpenRouter + Deepgram API keys as `BuildConfig` string constants, extractable from the APK | `build.gradle.kts:32-56` | **Accepted risk (C6).** ArthaReader is personal-use software; the owner confirmed the PRD framing. R8 is now on, which raises extraction cost without eliminating it — obfuscation is not encryption. Mitigated by provider-side spend caps, a 100k-char input guard, and an explicit non-distribution notice in the README. **Re-opens the moment the app is shared with anyone**, at which point §3.1's proxy is mandatory, not optional. |
 | ~~🔴 Critical~~ ✅ | `isMinifyEnabled = false` in release — no R8, no obfuscation, no shrinking | `build.gradle.kts:60` | **Fixed.** `isMinifyEnabled` and `isShrinkResources` both true. Keep rules added for enum `valueOf()` (persisted in Room as TEXT) and Room entity members; `SourceFile`/`LineNumberTable` retained so release stack traces stay readable. CI runs `assembleRelease`, so R8 is exercised on every PR. |
 | ~~🟠 High~~ ✅ | No release signing config — release builds are unsigned/debug-signed | `build.gradle.kts:58-66` | **Fixed.** `signingConfigs` reads `keystore.properties` (git-ignored) or `ANDROID_KEYSTORE_*` env vars, and is only declared when all four values are present so `assembleRelease` still succeeds unsigned on CI. `keystore.properties`, `*.jks`, `*.keystore` added to `.gitignore`. |
 | 🟠 High | `allowBackup="true"` with template rules — reading history syncs to Google Drive | `AndroidManifest.xml:9`, `res/xml/*.xml` | Exclude the database from cloud backup (§3.11). |
@@ -1483,7 +1496,7 @@ jobs:
 | C3 | Verify `./gradlew assembleDebug testDebugUnitTest` is green, then add the CI workflow | §9.1 | 2 h | ✅ **Done** — `.github/workflows/android.yml` runs assemble + unit tests + lint on every PR |
 | C4 | Remove the fake "40% read" progress bar and label | §2.3 | 30 min | ✅ **Done** — removed, with a comment explaining why it isn't coming back until a real read position is persisted |
 | C5 | Set `isMinifyEnabled = true` + `isShrinkResources = true`; add release signing config | §8 | 2 h | ✅ **Done** — signing reads env vars or git-ignored `keystore.properties` and stays unsigned when absent; CI now runs `assembleRelease` so R8 is actually exercised |
-| C6 | Decide the distribution model. If distributed → put a proxy in front of both providers. If personal-only → set hard spend caps, state it in the README, and treat C6 as accepted risk. | §3.1, §4.1 | 1–3 d |
+| C6 | Decide the distribution model. If distributed → put a proxy in front of both providers. If personal-only → set hard spend caps, state it in the README, and treat C6 as accepted risk. | §3.1, §4.1 | 1–3 d | ✅ **Decided: personal-use only.** Embedded keys accepted as risk. README gained a Distribution section stating the APK must not be shared and why; a 100k-character input guard bounds single-paste cost; provider-side spend caps are the owner's to set (external dashboards). Reclassifies H7 and M15 to Nice-to-have. |
 
 ### 10.2 🟠 High priority (before real users)
 

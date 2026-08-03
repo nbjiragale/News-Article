@@ -394,6 +394,18 @@ class EnglishLearningViewModel(
         }
     }
 
+    fun deleteRecentArticle(id: Long) {
+        viewModelScope.launch {
+            localStore.deleteRecentArticle(id)
+        }
+    }
+
+    fun clearRecentArticles() {
+        viewModelScope.launch {
+            localStore.clearRecentArticles()
+        }
+    }
+
     fun deleteSavedWord(savedKey: String) {
         viewModelScope.launch {
             localStore.deleteSavedWord(savedKey)

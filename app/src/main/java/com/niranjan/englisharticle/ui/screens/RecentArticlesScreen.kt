@@ -15,13 +15,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +45,38 @@ fun RecentArticlesScreen(
     articles: List<RecentArticle>,
     onBack: () -> Unit,
     onOpenArticle: (RecentArticle) -> Unit,
+    onDeleteArticle: (RecentArticle) -> Unit,
+    onClearAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showClearAllConfirm by remember { mutableStateOf(false) }
+
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            title = { Text("Clear reading history?") },
+            text = {
+                Text(
+                    "This removes all ${articles.size} saved articles from this device. " +
+                        "Saved words and practice progress are not affected."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearAllConfirm = false
+                        onClearAll()
+                    }
+                ) {
+                    Text("Clear all", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -57,18 +92,41 @@ fun RecentArticlesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-                    Text(
-                        text = "Recent Articles",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Pick up where you left off.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Recent Articles",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (articles.isEmpty()) {
+                                "Pick up where you left off."
+                            } else {
+                                "${articles.size} saved on this device."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (articles.isNotEmpty()) {
+                        TextButton(onClick = { showClearAllConfirm = true }) {
+                            Text(
+                                text = "Clear all",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
 
@@ -84,7 +142,11 @@ fun RecentArticlesScreen(
                 }
             } else {
                 items(articles, key = { it.id }) { article ->
-                    RecentArticleCard(article = article, onClick = { onOpenArticle(article) })
+                    RecentArticleCard(
+                        article = article,
+                        onClick = { onOpenArticle(article) },
+                        onDelete = { onDeleteArticle(article) }
+                    )
                 }
             }
         }
@@ -92,7 +154,11 @@ fun RecentArticlesScreen(
 }
 
 @Composable
-private fun RecentArticleCard(article: RecentArticle, onClick: () -> Unit) {
+private fun RecentArticleCard(
+    article: RecentArticle,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
     val metaText = remember(article.author, article.publishedDate, article.savedAtMillis) {
         article.metaText()
     }
@@ -142,6 +208,15 @@ private fun RecentArticleCard(article: RecentArticle, onClick: () -> Unit) {
                         maxLines = 1
                     )
                 }
+
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_trash),
+                        contentDescription = "Delete ${article.title.ifBlank { "untitled article" }}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             Text(
@@ -151,19 +226,9 @@ private fun RecentArticleCard(article: RecentArticle, onClick: () -> Unit) {
                 maxLines = 3
             )
 
-            // Reading progress indicator
-            LinearProgressIndicator(
-                progress = { 0.4f },  // TODO: wire up real progress from domain model
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
-
-            Text(
-                text = "40% read",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // No reading-progress indicator here on purpose. RecentArticle carries no
+            // read position yet, so anything shown would be invented. Restore this once
+            // the entity persists a real last-read offset.
         }
     }
 }

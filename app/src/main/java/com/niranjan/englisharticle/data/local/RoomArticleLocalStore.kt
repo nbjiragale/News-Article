@@ -29,12 +29,21 @@ class RoomArticleLocalStore(
     }
 
     override suspend fun saveRecentArticle(article: CleanArticleResult): Long {
-        return recentArticleDao.insert(
-            RecentArticleEntity.fromCleanArticleResult(
+        return recentArticleDao.save(
+            article = RecentArticleEntity.fromCleanArticleResult(
                 article = article,
                 savedAtMillis = System.currentTimeMillis()
-            )
+            ),
+            keep = MAX_RECENT_ARTICLES
         )
+    }
+
+    override suspend fun deleteRecentArticle(id: Long) {
+        recentArticleDao.delete(id)
+    }
+
+    override suspend fun clearRecentArticles() {
+        recentArticleDao.deleteAll()
     }
 
     override suspend fun getMeaning(
@@ -108,5 +117,15 @@ class RoomArticleLocalStore(
             correctIncrement = if (isCorrect) 1 else 0,
             practicedAtMillis = System.currentTimeMillis()
         )
+    }
+
+    private companion object {
+        /**
+         * Ceiling on stored history. Each row holds a full article body, so this table is
+         * the largest thing the app writes to disk; before this it grew without limit and
+         * had no delete path at all. 200 articles is far more than the Recents list is
+         * usable for, so the cap should only ever catch genuine runaway growth.
+         */
+        const val MAX_RECENT_ARTICLES = 200
     }
 }

@@ -45,6 +45,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.ui.components.AppTopBar
@@ -125,14 +126,24 @@ fun ArticleInputScreen(
                             ),
                             icon = {}
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_newspaper),
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .padding(end = 2.dp)
-                            )
-                            Text("Paste Article", style = MaterialTheme.typography.labelLarge)
+                            // Icon + label must share a Row: the SegmentedButton label slot
+                            // places all of its children at the same offset.
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_newspaper),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "Paste Article",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                         SegmentedButton(
                             selected = selectedTab == 1,
@@ -144,14 +155,22 @@ fun ArticleInputScreen(
                             ),
                             icon = {}
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_book_a),
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .padding(end = 2.dp)
-                            )
-                            Text("YouTube", style = MaterialTheme.typography.labelLarge)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_play),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "YouTube",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
 

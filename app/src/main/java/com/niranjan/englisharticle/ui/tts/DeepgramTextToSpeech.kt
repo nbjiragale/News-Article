@@ -88,20 +88,26 @@ class DeepgramTextToSpeech(
 
     fun speak(
         text: String,
-        onUnavailable: (String) -> Unit,
+        /**
+         * Called when Deepgram cannot speak (not configured, or a chunk failed) with the text not
+         * yet spoken and the index, within [text], of its first word. The receiver takes over
+         * playback: [onComplete] is then not called for this request.
+         */
+        onUnavailable: (remainingText: String, firstWordIndex: Int) -> Unit,
         onWordIndex: (Int?) -> Unit = {},
         onComplete: () -> Unit = {}
     ) {
         val cleaned = text.trim()
         if (cleaned.isBlank()) return
         if (!isConfigured) {
-            onUnavailable(cleaned)
+            onUnavailable(cleaned, 0)
             return
         }
 
         stop()
 
         activeJob = scope.launch {
+            var handedOff = false
             try {
                 val chunks = cleaned.chunkForTts(MAX_CHARS_PER_REQUEST)
                 val chunkPlans = buildChunkPlans(chunks)
@@ -111,15 +117,20 @@ class DeepgramTextToSpeech(
                     // (avoids replaying earlier chunks).
                     val remainingText = chunkPlans.drop(failure.chunkIndex).joinToString(" ") { it.text }
                     Log.w(TAG, "Deepgram failed at chunk ${failure.chunkIndex}; falling back to system TTS", failure.error)
-                    if (remainingText.isNotBlank()) onUnavailable(remainingText)
+                    if (remainingText.isNotBlank()) {
+                        handedOff = true
+                        onUnavailable(remainingText, chunkPlans[failure.chunkIndex].firstGlobalWordIndex)
+                    }
                 }
             } finally {
                 // Only report completion for the playback that is still current. A job cancelled
                 // because a newer speak() replaced it must not reset the newer playback's state.
                 if (activeJob === coroutineContext[Job]) {
                     activeJob = null
-                    onWordIndex(null)
-                    onComplete()
+                    if (!handedOff) {
+                        onWordIndex(null)
+                        onComplete()
+                    }
                 }
             }
         }
@@ -557,12 +568,7 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
     for (sentence in sentences) {
         if (sentence.length > maxChars) {
             flush()
-            var index = 0
-            while (index < sentence.length) {
-                val end = minOf(index + maxChars, sentence.length)
-                chunks += sentence.substring(index, end)
-                index = end
-            }
+            chunks += sentence.splitAtWordsWithin(maxChars)
             continue
         }
 
@@ -577,6 +583,39 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
     flush()
 
     return chunks
+}
+
+/**
+ * Splits one over-long sentence into pieces of at most [maxChars], breaking only between words.
+ *
+ * Auto-generated YouTube captions have no punctuation, so the whole transcript reaches here as
+ * one "sentence". Cutting it every [maxChars] characters split words in half: the audio read
+ * half-words, and each cut added a word to the count, so the highlight drifted one word
+ * further behind the speech at every chunk. Only a single word longer than [maxChars], which
+ * real text does not contain, is still cut.
+ */
+private fun String.splitAtWordsWithin(maxChars: Int): List<String> {
+    val pieces = mutableListOf<String>()
+    val current = StringBuilder()
+    for (word in WORD_REGEX.findAll(this).map { it.value }) {
+        if (word.length > maxChars) {
+            if (current.isNotEmpty()) {
+                pieces += current.toString()
+                current.clear()
+            }
+            pieces += word.chunked(maxChars)
+            continue
+        }
+        val projected = current.length + (if (current.isNotEmpty()) 1 else 0) + word.length
+        if (projected > maxChars) {
+            pieces += current.toString()
+            current.clear()
+        }
+        if (current.isNotEmpty()) current.append(' ')
+        current.append(word)
+    }
+    if (current.isNotEmpty()) pieces += current.toString()
+    return pieces
 }
 
 /**

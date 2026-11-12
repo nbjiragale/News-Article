@@ -39,11 +39,44 @@ fun String.ensureParagraphs(sentencesPerParagraph: Int = 3): String {
         .filter { it.isNotEmpty() }
         .toList()
 
-    if (sentences.size <= sentencesPerParagraph) return normalized
+    val hasRunOnSentence = sentences.any { it.wordCount() > MAX_SENTENCE_WORDS }
+    if (sentences.size <= sentencesPerParagraph && !hasRunOnSentence) return normalized
 
-    return sentences.chunked(sentencesPerParagraph)
-        .joinToString("\n\n") { it.joinToString(" ") }
+    val paragraphs = mutableListOf<String>()
+    val pending = mutableListOf<String>()
+    fun flush() {
+        if (pending.isNotEmpty()) {
+            paragraphs += pending.joinToString(" ")
+            pending.clear()
+        }
+    }
+
+    for (sentence in sentences) {
+        val words = sentence.split(' ').filter { it.isNotEmpty() }
+        if (words.size > MAX_SENTENCE_WORDS) {
+            // Unpunctuated text (auto-generated YouTube captions) arrives as one endless
+            // "sentence". Break it into short paragraphs so the reader is not one giant
+            // block, and so a sentence lookup (which stops at a line break) sends one short
+            // passage instead of the whole transcript.
+            flush()
+            words.chunked(RUN_ON_PARAGRAPH_WORDS).forEach { paragraphs += it.joinToString(" ") }
+        } else {
+            pending += sentence
+            if (pending.size == sentencesPerParagraph) flush()
+        }
+    }
+    flush()
+
+    return paragraphs.joinToString("\n\n")
 }
+
+/** Longer than any normal sentence; a "sentence" past this has lost its punctuation. */
+private const val MAX_SENTENCE_WORDS = 80
+
+/** Paragraph size used when splitting unpunctuated text. */
+private const val RUN_ON_PARAGRAPH_WORDS = 50
+
+private fun String.wordCount(): Int = split(' ').count { it.isNotEmpty() }
 
 fun String.toWordTokens(): List<WordToken> {
     var paragraphIndex = 0

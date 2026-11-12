@@ -11,6 +11,7 @@ import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
 import com.niranjan.englisharticle.domain.RecentArticle
 import com.niranjan.englisharticle.domain.SavedWord
+import com.niranjan.englisharticle.domain.articleWordCount
 import com.niranjan.englisharticle.ui.state.MeaningUiState
 import com.niranjan.englisharticle.ui.state.SelectedWord
 import kotlinx.coroutines.CancellationException
@@ -89,23 +90,46 @@ class EnglishLearningViewModel(
     }
 
     fun clearCurrentArticle() {
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 cleanedArticle = null,
-                isCleaningArticle = false,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                summaryError = null
             )
         }
     }
 
     fun clearArticleText() {
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
-        youTubeImportJob?.cancel()
+        stopArticleWork()
         _uiState.value = EnglishLearningUiState()
+    }
+
+    /**
+     * Cancels every job that loads or enriches the current article (cleaning, YouTube import,
+     * summary, word lookup) and clears their busy flags in the same step.
+     *
+     * Each entry point used to cancel only some of these and leave the matching flag set. A
+     * cancelled job never reaches the line that clears its flag, so the spinner stayed on and
+     * the button stayed disabled until the app was restarted. A YouTube import that was not
+     * cancelled could also finish later and replace the article the user had just opened.
+     *
+     * Idiom extraction is deliberately left running: it only adds data to an article that is
+     * already saved, and [enrichShownArticle] ignores it if another article is on screen.
+     */
+    private fun stopArticleWork() {
+        articleCleaningJob?.cancel()
+        youTubeImportJob?.cancel()
+        summaryJob?.cancel()
+        meaningLookupJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isCleaningArticle = false,
+                isImportingYouTube = false,
+                isSummarizingArticle = false,
+                selected = null,
+                meaningState = MeaningUiState.Idle
+            )
+        }
     }
 
     fun updateDraftYouTubeUrl(url: String) {
@@ -126,18 +150,12 @@ class EnglishLearningViewModel(
         if (url.isBlank()) return
         if (uiState.value.isImportingYouTube) return
 
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
-        summaryJob?.cancel()
-        youTubeImportJob?.cancel()
-
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 isImportingYouTube = true,
                 youTubeError = null,
-                cleaningError = null,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                cleaningError = null
             )
         }
 
@@ -166,12 +184,10 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val resolved = CleanArticleResult(
+            val resolved = formatTranscriptOrRaw(
+                rawTranscript = transcript.transcript,
                 title = transcript.title,
-                subtitle = "",
-                author = transcript.author,
-                publishedDate = "",
-                cleanArticle = transcript.transcript
+                author = transcript.author
             )
 
             _uiState.update {
@@ -179,23 +195,80 @@ class EnglishLearningViewModel(
                     cleanedArticle = resolved,
                     isImportingYouTube = false,
                     youTubeError = null,
+                    summaryError = null,
                     draftYouTubeUrl = "",
                     rawArticleForRetry = transcript.transcript
                 )
             }
             _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
+            saveAndExtractPhrases(resolved)
+        }
+    }
 
+    /**
+     * Turns a raw caption track into readable text. Auto-generated captions have no
+     * punctuation and no paragraphs, so the reader showed one giant block, sentence lookups
+     * sent the whole video as one "sentence", and read-aloud broke words in half.
+     *
+     * The AI formatter adds punctuation and paragraphs. It is only used for transcripts up to
+     * [MAX_AI_TRANSCRIPT_CHARS], because it must echo the whole text back within the request
+     * timeout. Longer transcripts, failures, and answers that dropped too much text fall back
+     * to the raw text, which the reader splits into short paragraphs locally.
+     */
+    private suspend fun formatTranscriptOrRaw(
+        rawTranscript: String,
+        title: String,
+        author: String
+    ): CleanArticleResult {
+        val raw = CleanArticleResult(
+            title = title,
+            subtitle = "",
+            author = author,
+            publishedDate = "",
+            cleanArticle = rawTranscript
+        )
+        if (rawTranscript.length > MAX_AI_TRANSCRIPT_CHARS) return raw
+
+        val formatted = try {
+            articleService.formatTranscript(rawTranscript, title, author)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            return raw
+        }
+        val keptEnoughText = formatted.cleanArticle.articleWordCount() >=
+            rawTranscript.articleWordCount() * MIN_TRANSCRIPT_KEPT_RATIO
+        if (formatted.cleanArticle.isBlank() || !keptEnoughText) return raw
+
+        return formatted.copy(
+            title = formatted.title.ifBlank { title },
+            author = formatted.author.ifBlank { author }
+        )
+    }
+
+    /**
+     * Saves a newly loaded article to history right away, then adds idiomatic phrases in a
+     * separate job.
+     *
+     * The save used to happen only after phrase extraction, inside the loading job. Going back
+     * from the reader cancels that job, so an article the user left quickly was never saved.
+     */
+    private suspend fun saveAndExtractPhrases(article: CleanArticleResult) {
+        runCatching { localStore.saveRecentArticle(article) }
+
+        viewModelScope.launch {
             val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(resolved.cleanArticle)
+                articleService.extractIdiomaticPhrases(article.cleanArticle)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Throwable) {
                 emptyList()
             }
-            val articleToSave = enrichShownArticle(resolved) { article ->
-                if (detectedPhrases.isEmpty()) article else article.copy(idiomaticPhrases = detectedPhrases)
-            }
+            if (detectedPhrases.isEmpty()) return@launch
 
+            val articleToSave = enrichShownArticle(article) { shown ->
+                shown.copy(idiomaticPhrases = detectedPhrases)
+            }
             runCatching { localStore.saveRecentArticle(articleToSave) }
         }
     }
@@ -204,25 +277,18 @@ class EnglishLearningViewModel(
         val sharedArticle = article.trim()
         if (sharedArticle.isBlank()) return
 
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
+        stopArticleWork()
         _uiState.value = EnglishLearningUiState(
             draftArticle = sharedArticle
         )
     }
 
     fun openRecentArticle(article: RecentArticle) {
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
-        summaryJob?.cancel()
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 cleanedArticle = article.toCleanArticleResult(),
-                isCleaningArticle = false,
-                isSummarizingArticle = false,
-                summaryError = null,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                summaryError = null
             )
         }
     }
@@ -429,15 +495,13 @@ class EnglishLearningViewModel(
             return
         }
 
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 rawArticleForRetry = rawArticle,
                 isCleaningArticle = true,
                 cleaningError = null,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                youTubeError = null
             )
         }
 
@@ -472,23 +536,12 @@ class EnglishLearningViewModel(
             _uiState.update {
                 it.copy(
                     cleanedArticle = displayResult,
-                    isCleaningArticle = false
+                    isCleaningArticle = false,
+                    summaryError = null
                 )
             }
             _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
-
-            val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                emptyList()
-            }
-            val articleToSave = enrichShownArticle(displayResult) { article ->
-                if (detectedPhrases.isEmpty()) article else article.copy(idiomaticPhrases = detectedPhrases)
-            }
-
-            runCatching { localStore.saveRecentArticle(articleToSave) }
+            saveAndExtractPhrases(displayResult)
         }
     }
 }
@@ -513,6 +566,16 @@ class EnglishLearningViewModel(
  * is tracked as H3 in docs/PRODUCTION_READINESS_REVIEW.md.
  */
 private const val MAX_ARTICLE_CHARS = 100_000
+
+/**
+ * Longest transcript sent to the AI formatter. The formatter echoes the whole text back, so a
+ * much longer one would not finish inside the request timeout. About 2,500 words, or a
+ * 15-minute video; longer videos use the raw captions.
+ */
+private const val MAX_AI_TRANSCRIPT_CHARS = 15_000
+
+/** The formatter may drop filler words; dropping more than this means it summarized. */
+private const val MIN_TRANSCRIPT_KEPT_RATIO = 0.8
 
 private fun tooLongMessage(actualLength: Int): String {
     val actualK = actualLength / 1_000

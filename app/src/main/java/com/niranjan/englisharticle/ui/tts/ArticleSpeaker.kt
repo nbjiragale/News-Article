@@ -26,6 +26,14 @@ class ArticleSpeaker(
         audioOffsetMs = deepgramAudioOffsetMs
     )
 
+    /** Which engine is reading the article right now, so pause/resume reach the right one. */
+    private enum class ArticleEngine { None, Deepgram, System }
+
+    private var articleEngine = ArticleEngine.None
+
+    /** Bumped on every new article playback or stop, so a replaced playback's callbacks are ignored. */
+    private var articleSession = 0
+
     private val _playbackState = mutableStateOf(ArticlePlaybackState.Idle)
     val playbackState: State<ArticlePlaybackState> = _playbackState
 
@@ -42,11 +50,12 @@ class ArticleSpeaker(
      */
     val currentShortSpeechText: State<String?> = systemTts.currentSpeechText
 
-    /** Short English snippets (single words, phrases, sentence lookups). Always uses Android TTS. */
+    /**
+     * Short English snippets (single words, phrases, sentence lookups, the summary). Always uses
+     * Android TTS, and never drives the article's play state or word highlight.
+     */
     fun speakEnglish(text: String) {
-        deepgram.stop()
-        _playbackState.value = ArticlePlaybackState.Idle
-        _currentWordIndex.value = null
+        endArticlePlayback()
         systemTts.speakEnglish(text)
     }
 
@@ -68,71 +77,104 @@ class ArticleSpeaker(
 
     /** Stops only the short-speech (Android TTS) path; leaves any article playback alone. */
     fun stopShortSpeech() {
+        if (articleEngine == ArticleEngine.System) return
         systemTts.stop()
     }
 
     /**
-     * Long-form article / summary text. Uses Deepgram when configured; falls back to Android TTS.
+     * Long-form article text. Uses Deepgram when configured; otherwise, or when Deepgram fails
+     * part way, Android TTS reads the rest.
      *
      * [globalWordOffset] is added to every word index emitted via [currentWordIndex], so the UI
      * can map back to its absolute token list when only a slice of the article is being read.
      */
     fun speakArticleEnglish(text: String, globalWordOffset: Int = 0) {
         if (text.isBlank()) return
-        systemTts.stop()
+        endArticlePlayback()
+        val session = ++articleSession
+
+        _playbackState.value = ArticlePlaybackState.Playing
+        _currentWordIndex.value = null
+
+        fun onWordIndex(relative: Int?) {
+            if (session != articleSession) return
+            _currentWordIndex.value = relative?.let { it + globalWordOffset }
+        }
+
+        fun onComplete() {
+            if (session != articleSession) return
+            articleEngine = ArticleEngine.None
+            _playbackState.value = ArticlePlaybackState.Idle
+            _currentWordIndex.value = null
+        }
+
+        fun speakWithSystemTts(fallbackText: String, firstWordIndex: Int) {
+            if (session != articleSession) return
+            val wasPaused = _playbackState.value == ArticlePlaybackState.Paused
+            articleEngine = ArticleEngine.System
+            systemTts.speakLongEnglish(
+                text = fallbackText,
+                onWordIndex = { relative -> onWordIndex(relative?.let { it + firstWordIndex }) },
+                onComplete = ::onComplete
+            )
+            if (wasPaused) systemTts.pauseLong()
+        }
 
         if (deepgram.isConfigured) {
-            _playbackState.value = ArticlePlaybackState.Playing
-            _currentWordIndex.value = null
+            articleEngine = ArticleEngine.Deepgram
             deepgram.speak(
                 text = text,
-                onUnavailable = { fallbackText ->
-                    _playbackState.value = ArticlePlaybackState.Idle
-                    _currentWordIndex.value = null
-                    systemTts.speakEnglish(fallbackText)
-                },
-                onWordIndex = { relative ->
-                    _currentWordIndex.value = relative?.let { it + globalWordOffset }
-                },
-                onComplete = {
-                    _playbackState.value = ArticlePlaybackState.Idle
-                    _currentWordIndex.value = null
-                }
+                onUnavailable = ::speakWithSystemTts,
+                onWordIndex = ::onWordIndex,
+                onComplete = ::onComplete
             )
         } else {
-            systemTts.speakEnglish(text)
+            speakWithSystemTts(text, 0)
         }
     }
 
     fun pauseArticle() {
         if (_playbackState.value != ArticlePlaybackState.Playing) return
-        deepgram.pause()
+        when (articleEngine) {
+            ArticleEngine.Deepgram -> deepgram.pause()
+            ArticleEngine.System -> systemTts.pauseLong()
+            ArticleEngine.None -> return
+        }
         _playbackState.value = ArticlePlaybackState.Paused
     }
 
     fun resumeArticle() {
         if (_playbackState.value != ArticlePlaybackState.Paused) return
-        deepgram.resume()
+        when (articleEngine) {
+            ArticleEngine.Deepgram -> deepgram.resume()
+            ArticleEngine.System -> systemTts.resumeLong()
+            ArticleEngine.None -> return
+        }
         _playbackState.value = ArticlePlaybackState.Playing
     }
 
     fun speakKannada(text: String) {
-        deepgram.stop()
-        _playbackState.value = ArticlePlaybackState.Idle
-        _currentWordIndex.value = null
+        endArticlePlayback()
         systemTts.speakKannada(text)
     }
 
     fun stop() {
-        deepgram.stop()
+        endArticlePlayback()
         systemTts.stop()
-        _playbackState.value = ArticlePlaybackState.Idle
-        _currentWordIndex.value = null
     }
 
     fun shutdown() {
+        endArticlePlayback()
         deepgram.shutdown()
         systemTts.shutdown()
+    }
+
+    /** Stops article playback on either engine and resets its state. Leaves short speech alone. */
+    private fun endArticlePlayback() {
+        articleSession++
+        deepgram.stop()
+        if (articleEngine == ArticleEngine.System) systemTts.stop()
+        articleEngine = ArticleEngine.None
         _playbackState.value = ArticlePlaybackState.Idle
         _currentWordIndex.value = null
     }

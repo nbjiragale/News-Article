@@ -1,5 +1,6 @@
 package com.niranjan.englisharticle.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -170,24 +171,32 @@ fun EnglishLearningApp(
                 } else {
                     val playbackState by textToSpeech.playbackState
                     val currentWordIndex by textToSpeech.currentWordIndex
+                    fun closeReader() {
+                        textToSpeech.stop()
+                        viewModel.clearCurrentArticle()
+                        navController.navigate(AppRoute.Input) {
+                            popUpTo(AppRoute.Input) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
+                    // The system back gesture must behave like the top-bar back button. Without
+                    // this it only popped the screen, and the article kept being read aloud on
+                    // the Home screen with no way to stop it.
+                    BackHandler(onBack = ::closeReader)
                     ArticleViewerScreen(
                         article = currentArticle,
                         isSummarizing = uiState.isSummarizingArticle,
                         summaryError = uiState.summaryError,
-                        onBackToInput = {
-                            textToSpeech.stop()
-                            viewModel.clearCurrentArticle()
-                            navController.navigate(AppRoute.Input) {
-                                popUpTo(AppRoute.Input) { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        },
+                        onBackToInput = ::closeReader,
                         onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
                         onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
                         onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
                         onWordTap = viewModel::selectWord,
                         onRequestContext = viewModel::requestArticleContext,
-                        onSpeakEnglish = textToSpeech::speakArticleEnglish,
+                        // The summary is a couple of sentences: read it on the short-speech path.
+                        // The article path drove the reader's word highlight and Listen button,
+                        // so reading the summary used to highlight the article's first words.
+                        onSpeakEnglish = textToSpeech::speakEnglish,
                         onSpeakKannada = textToSpeech::speakKannada,
                         playbackState = playbackState,
                         currentWordIndex = currentWordIndex,

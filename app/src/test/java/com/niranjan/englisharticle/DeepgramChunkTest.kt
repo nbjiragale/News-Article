@@ -248,4 +248,19 @@ class DeepgramChunkTest {
         val shifted = applyAudioOffset(starts, -150)
         assertEquals(listOf(0, 0, 50), shifted.toList())
     }
+
+    @Test
+    fun `long unpunctuated text is split between words only`() {
+        val words = (1..900).map { "word$it" }
+        val text = words.joinToString(" ")
+        val result = text.chunkForTts(maxChars = 1000)
+
+        assertTrue(result.size > 1)
+        assertTrue(result.all { it.length <= 1000 })
+        // Every piece holds whole words, so the word count (which drives the highlight) is unchanged.
+        val rejoinedWords = result.flatMap { it.split(" ") }
+        assertEquals(words, rejoinedWords)
+        val plans = buildChunkPlans(result)
+        assertEquals(words.size, plans.sumOf { it.sourceWords.size })
+    }
 }

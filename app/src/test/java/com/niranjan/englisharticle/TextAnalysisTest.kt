@@ -107,4 +107,43 @@ class TextAnalysisTest {
         val text = "One sentence. Two sentence. Three sentence."
         assertEquals(text, text.ensureParagraphs())
     }
+
+    @Test
+    fun findSentenceContaining_doesNotSplitOnAbbreviationsOrDecimals() {
+        val body = "Mr. Modi met Dr. Rao in the U.S. capital on Monday. Prices rose 3.5% this week."
+
+        assertEquals(
+            "Mr. Modi met Dr. Rao in the U.S. capital on Monday.",
+            body.findSentenceContaining(body.indexOf("Rao"))
+        )
+        assertEquals(
+            "Prices rose 3.5% this week.",
+            body.findSentenceContaining(body.indexOf("week"))
+        )
+    }
+
+    @Test
+    fun findSentenceContaining_keepsClosingQuoteAndStopsAtLineBreak() {
+        val body = "He said, \"We will win.\" Then he left.\n\nA new paragraph starts here."
+
+        assertEquals("He said, \"We will win.\"", body.findSentenceContaining(body.indexOf("win")))
+        assertEquals("Then he left.", body.findSentenceContaining(body.indexOf("left")))
+        assertEquals("A new paragraph starts here.", body.findSentenceContaining(body.indexOf("new")))
+    }
+
+    @Test
+    fun ensureParagraphs_groupsWholeSentencesWithAbbreviations() {
+        val text = "Mr. Shah spoke first. Gen. Singh spoke next. Prices rose 2.5%. " +
+            "The U.S. team arrived. Talks ended late."
+
+        val paragraphs = text.ensureParagraphs().split("\n\n")
+
+        assertEquals(
+            listOf(
+                "Mr. Shah spoke first. Gen. Singh spoke next. Prices rose 2.5%.",
+                "The U.S. team arrived. Talks ended late."
+            ),
+            paragraphs
+        )
+    }
 }

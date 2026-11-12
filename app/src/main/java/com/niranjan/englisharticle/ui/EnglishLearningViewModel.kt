@@ -1,5 +1,6 @@
 package com.niranjan.englisharticle.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -58,12 +60,22 @@ class EnglishLearningViewModel(
     private val _navigationEvents = MutableSharedFlow<EnglishNavigationEvent>()
     val navigationEvents = _navigationEvents.asSharedFlow()
 
+    // A database error must not reach viewModelScope: there it is an uncaught exception that
+    // kills the app. Show an empty list and log instead.
     val recentArticles: StateFlow<List<RecentArticle>> = localStore
         .observeRecentArticles()
+        .catch { error ->
+            Log.e(TAG, "Could not read recent articles", error)
+            emit(emptyList())
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val savedWords: StateFlow<List<SavedWord>> = localStore
         .observeSavedWords()
+        .catch { error ->
+            Log.e(TAG, "Could not read saved words", error)
+            emit(emptyList())
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var meaningLookupJob: Job? = null
@@ -254,7 +266,7 @@ class EnglishLearningViewModel(
      * from the reader cancels that job, so an article the user left quickly was never saved.
      */
     private suspend fun saveAndExtractPhrases(article: CleanArticleResult) {
-        runCatching { localStore.saveRecentArticle(article) }
+        runDatabaseWrite("save recent article") { localStore.saveRecentArticle(article) }
 
         viewModelScope.launch {
             val detectedPhrases = try {
@@ -269,7 +281,7 @@ class EnglishLearningViewModel(
             val articleToSave = enrichShownArticle(article) { shown ->
                 shown.copy(idiomaticPhrases = detectedPhrases)
             }
-            runCatching { localStore.saveRecentArticle(articleToSave) }
+            runDatabaseWrite("save recent article") { localStore.saveRecentArticle(articleToSave) }
         }
     }
 
@@ -335,7 +347,7 @@ class EnglishLearningViewModel(
             _uiState.update { it.copy(isSummarizingArticle = false, summaryError = null) }
             val updated = enrichShownArticle(current) { article -> article.copy(summary = summary) }
 
-            runCatching { localStore.saveRecentArticle(updated) }
+            runDatabaseWrite("save recent article") { localStore.saveRecentArticle(updated) }
         }
     }
 
@@ -355,11 +367,19 @@ class EnglishLearningViewModel(
         }
 
         meaningLookupJob = viewModelScope.launch {
-            val cachedMeaning = localStore.getMeaning(
-                word = tapped.word,
-                sentence = tapped.sentence,
-                lookupMode = tapped.lookupMode
-            )
+            // A cache read failure just means "not cached"; fetch it instead of crashing.
+            val cachedMeaning = try {
+                localStore.getMeaning(
+                    word = tapped.word,
+                    sentence = tapped.sentence,
+                    lookupMode = tapped.lookupMode
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(TAG, "Meaning cache read failed", error)
+                null
+            }
             val cachedMeaningIsValid = cachedMeaning != null &&
                 cachedMeaning.hasValidKannadaFields() &&
                 (
@@ -375,33 +395,43 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val nextMeaningState = runCatching {
-                articleService.fetchMeaning(
+            // Not runCatching: it also catches the CancellationException of a lookup that was
+            // replaced (for example the same word tapped twice). The cancelled lookup then
+            // wrote "Job was cancelled" as an error, and because the new tap is an equal
+            // SelectedWord, that error showed until the new answer arrived.
+            val nextMeaningState = try {
+                val meaning = articleService.fetchMeaning(
                     articleText = currentArticle.contextForMeaning(),
                     sentence = tapped.sentence,
                     word = tapped.word,
                     lookupMode = tapped.lookupMode
                 )
-            }.fold(
-                onSuccess = { meaning ->
-                    runCatching {
-                        localStore.saveMeaning(
-                            word = tapped.word,
-                            sentence = tapped.sentence,
-                            lookupMode = tapped.lookupMode,
-                            meaning = meaning
-                        )
-                    }
-                    MeaningUiState.Success(meaning)
-                },
-                onFailure = { MeaningUiState.Error(it.message ?: "Could not load meaning.") }
-            )
+                runDatabaseWrite("save meaning to cache") {
+                    localStore.saveMeaning(
+                        word = tapped.word,
+                        sentence = tapped.sentence,
+                        lookupMode = tapped.lookupMode,
+                        meaning = meaning
+                    )
+                }
+                MeaningUiState.Success(meaning)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                MeaningUiState.Error(error.message ?: "Could not load meaning.")
+            }
 
             _uiState.updateMeaningIfStillSelected(
                 selected = tapped,
                 meaningState = nextMeaningState
             )
         }
+    }
+
+    /** Tries the current word lookup again after an error. */
+    fun retryMeaning() {
+        val current = uiState.value.selected ?: return
+        selectWord(current)
     }
 
     fun dismissMeaning() {
@@ -424,7 +454,7 @@ class EnglishLearningViewModel(
         val currentState = uiState.value
         val tapped = currentState.selected ?: return
 
-        viewModelScope.launch {
+        launchDatabaseWrite("save word") {
             localStore.saveWord(
                 word = tapped.word,
                 sentence = tapped.sentence,
@@ -436,26 +466,39 @@ class EnglishLearningViewModel(
     }
 
     fun deleteRecentArticle(id: Long) {
-        viewModelScope.launch {
-            localStore.deleteRecentArticle(id)
-        }
+        launchDatabaseWrite("delete recent article") { localStore.deleteRecentArticle(id) }
     }
 
     fun clearRecentArticles() {
-        viewModelScope.launch {
-            localStore.clearRecentArticles()
-        }
+        launchDatabaseWrite("clear recent articles") { localStore.clearRecentArticles() }
     }
 
     fun deleteSavedWord(savedKey: String) {
-        viewModelScope.launch {
-            localStore.deleteSavedWord(savedKey)
-        }
+        launchDatabaseWrite("delete saved word") { localStore.deleteSavedWord(savedKey) }
     }
 
     fun recordPracticeResult(savedKey: String, isCorrect: Boolean) {
-        viewModelScope.launch {
+        launchDatabaseWrite("record practice result") {
             localStore.recordPracticeResult(savedKey, isCorrect)
+        }
+    }
+
+    /**
+     * Runs a database write in [viewModelScope]. These used to run bare, so any database error
+     * (disk full, a corrupt file) was an uncaught exception in [viewModelScope], which kills
+     * the app. A failed write is now logged; the UI keeps showing what the database holds.
+     */
+    private fun launchDatabaseWrite(action: String, write: suspend () -> Unit) {
+        viewModelScope.launch { runDatabaseWrite(action, write) }
+    }
+
+    private suspend fun runDatabaseWrite(action: String, write: suspend () -> Unit) {
+        try {
+            write()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.e(TAG, "Could not $action", error)
         }
     }
 
@@ -566,6 +609,8 @@ class EnglishLearningViewModel(
  * is tracked as H3 in docs/PRODUCTION_READINESS_REVIEW.md.
  */
 private const val MAX_ARTICLE_CHARS = 100_000
+
+private const val TAG = "EnglishLearningVM"
 
 /**
  * Longest transcript sent to the AI formatter. The formatter echoes the whole text back, so a

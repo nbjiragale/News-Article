@@ -11,12 +11,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 
 class OpenRouterArticleService(
@@ -88,7 +90,7 @@ class OpenRouterArticleService(
             """.trimIndent()
         )
 
-        val result = CleanArticleResult.fromJson(JSONObject(content))
+        val result = CleanArticleResult.fromJson(parseModelJson(content))
         val postCleaned = ArticleFormatter.postClean(result.cleanArticle)
         return result.copy(cleanArticle = postCleaned)
     }
@@ -140,7 +142,7 @@ class OpenRouterArticleService(
             """.trimIndent()
         )
 
-        val parsed = CleanArticleResult.fromJson(JSONObject(content))
+        val parsed = CleanArticleResult.fromJson(parseModelJson(content))
         val resolvedTitle = parsed.title.ifBlank { titleHint }
         val resolvedAuthor = parsed.author.ifBlank { authorHint }
         val postCleaned = ArticleFormatter.postClean(parsed.cleanArticle)
@@ -190,7 +192,7 @@ class OpenRouterArticleService(
             """.trimIndent()
         )
 
-        return JSONObject(content)
+        return parseModelJson(content)
             .optJSONArray("phrases")
             ?.toStringList()
             ?.map { it.trim() }
@@ -243,7 +245,7 @@ class OpenRouterArticleService(
             """.trimIndent()
         )
 
-        return ArticleSummary.fromJson(JSONObject(content))
+        return ArticleSummary.fromJson(parseModelJson(content))
     }
 
     override suspend fun fetchMeaning(
@@ -323,7 +325,7 @@ class OpenRouterArticleService(
             """.trimIndent()
         )
 
-        return MeaningResult.fromJson(JSONObject(content))
+        return MeaningResult.fromJson(parseModelJson(content))
     }
 
     private fun MeaningLookupMode.instructions(): String {
@@ -391,7 +393,7 @@ class OpenRouterArticleService(
             .toString()
 
         return try {
-            retryWithBackoff {
+            retryWithBackoff(isRetryable = Throwable::isSafeToRetryBilledRequest) {
                 withContext(Dispatchers.IO) { executeChatRequest(payload) }
             }
         } catch (cancellation: CancellationException) {
@@ -433,7 +435,7 @@ class OpenRouterArticleService(
                 if (responseCode == 429 || responseCode in 500..599) {
                     throw RetryableHttpException(responseCode, "OpenRouter HTTP $responseCode")
                 }
-                error("OpenRouter HTTP $responseCode")
+                throw OpenRouterHttpException(responseCode)
             }
 
             return JSONObject(body)
@@ -455,10 +457,35 @@ class OpenRouterArticleService(
             "The service is busy right now. Please wait a moment and try again."
         error is RetryableHttpException ->
             "The article service is temporarily unavailable. Please try again."
+        error is SocketTimeoutException ->
+            "The article service took too long to answer. Please try again."
         error is IOException ->
             "Couldn't reach the article service. Please check your internet connection."
+        error is OpenRouterHttpException && (error.code == 401 || error.code == 403) ->
+            "The article service rejected the app's API key."
+        error is OpenRouterHttpException ->
+            "The article service returned an error (HTTP ${error.code}). Please try again."
+        error is JSONException ->
+            "The article service sent an answer the app could not read. Please try again."
         else -> error.message ?: "Something went wrong. Please try again."
     }
+
+    /**
+     * Parses the JSON the model wrote. Models sometimes return broken or non-JSON text; the raw
+     * [JSONException] text ("Value <html> of type java.lang.String cannot be converted...")
+     * used to be shown to the user as-is.
+     */
+    private fun parseModelJson(content: String): JSONObject = try {
+        JSONObject(content)
+    } catch (error: JSONException) {
+        Log.w(TAG, "Model returned invalid JSON: ${content.take(200)}", error)
+        throw IllegalStateException(
+            "The AI sent an answer the app could not read. Please try again.",
+            error
+        )
+    }
+
+    private class OpenRouterHttpException(val code: Int) : RuntimeException("OpenRouter HTTP $code")
 
     private companion object {
         private const val TAG = "OpenRouterService"

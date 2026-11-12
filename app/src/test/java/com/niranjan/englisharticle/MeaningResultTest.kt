@@ -18,6 +18,28 @@ class MeaningResultTest {
     }
 
     @Test
+    fun hasValidKannadaFields_acceptsDandaPunctuation() {
+        val meaning = meaningResult(
+            meaningKannada = "ಬೆಂಬಲ",
+            explanationKannada = "ಈ ಪದವು ಸಹಾಯವನ್ನು ಸೂಚಿಸುತ್ತದೆ।",
+            exampleKannada = "ಹೂಡಿಕೆದಾರರು ಯೋಜನೆಯನ್ನು ಬೆಂಬಲಿಸಿದರು॥"
+        )
+
+        assertTrue(meaning.hasValidKannadaFields())
+    }
+
+    @Test
+    fun hasValidKannadaFields_stillRejectsHindiWords() {
+        val meaning = meaningResult(
+            meaningKannada = "समर्थन",
+            explanationKannada = "ಈ ಪದವು ಸಹಾಯವನ್ನು ಸೂಚಿಸುತ್ತದೆ।",
+            exampleKannada = "ಹೂಡಿಕೆದಾರರು ಯೋಜನೆಯನ್ನು ಬೆಂಬಲಿಸಿದರು."
+        )
+
+        assertFalse(meaning.hasValidKannadaFields())
+    }
+
+    @Test
     fun hasValidKannadaFields_rejectsTeluguScript() {
         val meaning = meaningResult(
             meaningKannada = "మద్దతు",

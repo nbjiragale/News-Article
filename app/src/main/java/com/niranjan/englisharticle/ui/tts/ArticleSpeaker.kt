@@ -2,12 +2,14 @@ package com.niranjan.englisharticle.ui.tts
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.niranjan.englisharticle.BuildConfig
 
 enum class ArticlePlaybackState { Idle, Playing, Paused }
@@ -180,12 +182,37 @@ class ArticleSpeaker(
     }
 }
 
+/**
+ * Returns the app's [ArticleSpeaker], kept in a ViewModel so it survives configuration
+ * changes. It used to be remembered per Activity and shut down on dispose, so rotating the
+ * phone stopped the article being read aloud.
+ */
 @Composable
 fun rememberArticleSpeaker(): ArticleSpeaker {
-    val context = LocalContext.current
-    val speaker = remember(context) { ArticleSpeaker(context) }
-    DisposableEffect(speaker) {
-        onDispose { speaker.shutdown() }
+    val appContext = LocalContext.current.applicationContext
+    val holder: ArticleSpeakerHolder = viewModel(
+        factory = remember(appContext) { ArticleSpeakerHolder.factory(appContext) }
+    )
+    return holder.speaker
+}
+
+/** Owns the [ArticleSpeaker] for as long as the screen's ViewModel store lives. */
+class ArticleSpeakerHolder(context: Context) : ViewModel() {
+    val speaker = ArticleSpeaker(context.applicationContext)
+
+    override fun onCleared() {
+        speaker.shutdown()
     }
-    return speaker
+
+    companion object {
+        fun factory(context: Context) = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                require(modelClass.isAssignableFrom(ArticleSpeakerHolder::class.java)) {
+                    "Unknown ViewModel class: ${modelClass.name}"
+                }
+                return ArticleSpeakerHolder(context) as T
+            }
+        }
+    }
 }

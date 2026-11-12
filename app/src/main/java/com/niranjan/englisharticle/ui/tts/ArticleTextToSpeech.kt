@@ -96,24 +96,36 @@ class ArticleTextToSpeech(context: Context) : TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         isInitializing = false
         isReady = status == TextToSpeech.SUCCESS
-        if (isReady) {
-            engine?.setSpeechRate(0.92f)
-            engine?.setOnUtteranceProgressListener(progressListener)
-            pendingSpeech?.let { (text, locale) -> speak(text, locale) }
-            pendingSpeech = null
-            longSession?.takeIf { it.waitingForEngine }?.let { session ->
-                session.waitingForEngine = false
-                if (!session.paused) speakLongFrom(session, session.currentChunk)
-            }
-        } else {
-            // The engine will never become usable; drop everything waiting on it so no button
-            // stays stuck in its "speaking" state, and let a later request try a fresh engine.
-            engine?.shutdown()
-            engine = null
-            pendingSpeech = null
-            _currentSpeechText.value = null
-            finishLongSession()
+        // Some engines call onInit from inside the TextToSpeech constructor, before
+        // ensureEngine() has stored the engine. ensureEngine() finishes the job in that case.
+        if (engine == null) return
+        if (isReady) onEngineReady() else onEngineFailed()
+    }
+
+    private fun onEngineReady() {
+        engine?.setSpeechRate(0.92f)
+        engine?.setOnUtteranceProgressListener(progressListener)
+        val pending = pendingSpeech
+        pendingSpeech = null
+        pending?.let { (text, locale) -> speak(text, locale) }
+        longSession?.takeIf { it.waitingForEngine }?.let { session ->
+            session.waitingForEngine = false
+            if (!session.paused) speakLongFrom(session, session.currentChunk)
         }
+    }
+
+    /**
+     * The engine will never become usable. Drop everything waiting on it so no button stays
+     * stuck in its "speaking" state, and let the next request try a fresh engine. Before, the
+     * dead engine was kept, so every later request queued up behind it forever.
+     */
+    private fun onEngineFailed() {
+        engine?.shutdown()
+        engine = null
+        isReady = false
+        pendingSpeech = null
+        _currentSpeechText.value = null
+        finishLongSession()
     }
 
     fun speakEnglish(text: String) {
@@ -203,6 +215,11 @@ class ArticleTextToSpeech(context: Context) : TextToSpeech.OnInitListener {
         longSession = null
 
         ensureEngine()
+        if (engine == null) {
+            // The engine failed to start during ensureEngine(); nothing can be spoken.
+            _currentSpeechText.value = null
+            return
+        }
         if (!isReady) {
             pendingSpeech = cleanedText to locale
             _currentSpeechText.value = cleanedText
@@ -229,8 +246,14 @@ class ArticleTextToSpeech(context: Context) : TextToSpeech.OnInitListener {
         }
 
         ensureEngine()
+        // ensureEngine() may have failed the engine and ended this session already.
+        if (longSession !== session) return
         val ttsEngine = engine
-        if (!isReady || ttsEngine == null) {
+        if (ttsEngine == null) {
+            finishLongSession()
+            return
+        }
+        if (!isReady) {
             session.waitingForEngine = true
             return
         }
@@ -310,9 +333,13 @@ class ArticleTextToSpeech(context: Context) : TextToSpeech.OnInitListener {
         if (engine != null || isInitializing) return
 
         isInitializing = true
-        engine = TextToSpeech(appContext, this).also { tts ->
-            // Set listener early in case init succeeds before onInit hooks it up.
-            tts.setOnUtteranceProgressListener(progressListener)
+        val tts = TextToSpeech(appContext, this)
+        // Set listener early in case init succeeds before onInit hooks it up.
+        tts.setOnUtteranceProgressListener(progressListener)
+        engine = tts
+        if (!isInitializing) {
+            // onInit already ran inside the constructor; act on its result now.
+            if (isReady) onEngineReady() else onEngineFailed()
         }
     }
 

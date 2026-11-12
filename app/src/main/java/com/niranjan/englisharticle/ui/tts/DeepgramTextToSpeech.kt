@@ -5,6 +5,7 @@ import android.media.MediaPlayer
 import android.util.Log
 import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.data.RetryableHttpException
+import com.niranjan.englisharticle.data.isSafeToRetryBilledRequest
 import com.niranjan.englisharticle.data.retryWithBackoff
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -242,7 +243,7 @@ class DeepgramTextToSpeech(
             return@withContext cacheFile
         }
 
-        retryWithBackoff { downloadMp3(chunk, cacheFile) }
+        retryWithBackoff(isRetryable = Throwable::isSafeToRetryBilledRequest) { downloadMp3(chunk, cacheFile) }
         cacheFile
     }
 
@@ -289,7 +290,7 @@ class DeepgramTextToSpeech(
     }
 
     private suspend fun fetchSttWordTimings(mp3File: File): List<SttWord> = withContext(Dispatchers.IO) {
-        retryWithBackoff { requestSttWordTimings(mp3File) }
+        retryWithBackoff(isRetryable = Throwable::isSafeToRetryBilledRequest) { requestSttWordTimings(mp3File) }
     }
 
     private fun requestSttWordTimings(mp3File: File): List<SttWord> {

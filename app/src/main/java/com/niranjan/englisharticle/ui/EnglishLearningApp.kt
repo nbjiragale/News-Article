@@ -286,6 +286,7 @@ fun EnglishLearningApp(
                     navController.navigateSingleTop(AppRoute.Practice)
                 },
                 onChangeMode = viewModel::setLookupMode,
+                onRetry = viewModel::retryMeaning,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp)
             )
         }

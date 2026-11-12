@@ -12,8 +12,8 @@ interface RecentArticleDao {
     @Query("SELECT * FROM recent_articles ORDER BY savedAtMillis DESC")
     fun observeAll(): Flow<List<RecentArticleEntity>>
 
-    @Query("SELECT id FROM recent_articles WHERE contentHash = :contentHash LIMIT 1")
-    suspend fun findIdByContentHash(contentHash: String): Long?
+    @Query("SELECT * FROM recent_articles WHERE contentHash = :contentHash LIMIT 1")
+    suspend fun findByContentHash(contentHash: String): RecentArticleEntity?
 
     @Insert
     suspend fun insert(article: RecentArticleEntity): Long
@@ -49,15 +49,19 @@ interface RecentArticleDao {
      * fail the insert and then update nothing — silently dropping the save. Resolving the id
      * from the hash first keeps the update pointed at a real primary key.
      *
+     * Enrichments already stored (summary, idiomatic phrases) are kept when [article] does
+     * not carry them. The summary and the phrase extraction finish at different times and
+     * each saves the article; without this merge, the later save erased the earlier one's work.
+     *
      * `@Transaction` so the lookup and the write cannot interleave with a concurrent save of
      * the same article and recreate the duplicate this exists to prevent.
      */
     @Transaction
     suspend fun save(article: RecentArticleEntity, keep: Int): Long {
-        val existingId = findIdByContentHash(article.contentHash)
-        val savedId = if (existingId != null) {
-            update(article.copy(id = existingId))
-            existingId
+        val existing = findByContentHash(article.contentHash)
+        val savedId = if (existing != null) {
+            update(article.mergedOver(existing).copy(id = existing.id))
+            existing.id
         } else {
             insert(article)
         }

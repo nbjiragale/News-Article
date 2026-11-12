@@ -20,7 +20,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleIncomingIntent(intent)
+        // Only a fresh launch carries a new share. After rotation or process restore the
+        // Activity still holds the original SEND intent; handling it again would re-import the
+        // shared text and wipe whatever the user is reading now (the ViewModel survived).
+        // Same for a relaunch from the recents screen, which replays the old intent.
+        val launchedFromHistory =
+            ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (savedInstanceState == null && !launchedFromHistory) {
+            handleIncomingIntent(intent)
+        }
         setContent {
             val sharedArticle by sharedArticleText.collectAsState()
 

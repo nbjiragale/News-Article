@@ -80,6 +80,33 @@ data class RecentArticleEntity(
 }
 
 /**
+ * Returns this (newer) row, but keeps [existing]'s summary and idiomatic phrases wherever
+ * this row has none. Enrichments are only ever added, never deliberately cleared, so a blank
+ * value here means "not known by this save", not "remove it".
+ */
+internal fun RecentArticleEntity.mergedOver(existing: RecentArticleEntity): RecentArticleEntity {
+    val hasSummary = summaryWhatHappenedEnglish.isNotBlank() ||
+        summaryWhatHappenedKannada.isNotBlank() ||
+        summaryGistEnglish.isNotBlank() ||
+        summaryGistKannada.isNotBlank()
+    val withPhrases = if (idiomaticPhrasesJson.toPhraseList().isEmpty()) {
+        copy(idiomaticPhrasesJson = existing.idiomaticPhrasesJson)
+    } else {
+        this
+    }
+    return if (hasSummary) {
+        withPhrases
+    } else {
+        withPhrases.copy(
+            summaryWhatHappenedEnglish = existing.summaryWhatHappenedEnglish,
+            summaryWhatHappenedKannada = existing.summaryWhatHappenedKannada,
+            summaryGistEnglish = existing.summaryGistEnglish,
+            summaryGistKannada = existing.summaryGistKannada
+        )
+    }
+}
+
+/**
  * Stable identity for an article, used to recognise a re-save of something already in
  * history instead of inserting a duplicate.
  *

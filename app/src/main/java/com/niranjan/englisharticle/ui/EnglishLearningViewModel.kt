@@ -192,20 +192,8 @@ class EnglishLearningViewModel(
             } catch (_: Throwable) {
                 emptyList()
             }
-            val articleToSave = if (detectedPhrases.isEmpty()) {
-                resolved
-            } else {
-                resolved.copy(idiomaticPhrases = detectedPhrases)
-            }
-
-            if (detectedPhrases.isNotEmpty()) {
-                _uiState.update { current ->
-                    if (current.cleanedArticle?.cleanArticle == resolved.cleanArticle) {
-                        current.copy(cleanedArticle = articleToSave)
-                    } else {
-                        current
-                    }
-                }
+            val articleToSave = enrichShownArticle(resolved) { article ->
+                if (detectedPhrases.isEmpty()) article else article.copy(idiomaticPhrases = detectedPhrases)
             }
 
             runCatching { localStore.saveRecentArticle(articleToSave) }
@@ -278,21 +266,8 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val updated = current.copy(summary = summary)
-            _uiState.update { state ->
-                if (state.cleanedArticle?.cleanArticle == current.cleanArticle) {
-                    state.copy(
-                        cleanedArticle = updated,
-                        isSummarizingArticle = false,
-                        summaryError = null
-                    )
-                } else {
-                    state.copy(
-                        isSummarizingArticle = false,
-                        summaryError = null
-                    )
-                }
-            }
+            _uiState.update { it.copy(isSummarizingArticle = false, summaryError = null) }
+            val updated = enrichShownArticle(current) { article -> article.copy(summary = summary) }
 
             runCatching { localStore.saveRecentArticle(updated) }
         }
@@ -418,6 +393,34 @@ class EnglishLearningViewModel(
         }
     }
 
+    /**
+     * Applies [enrich] (add a summary, add idioms) to the article on screen and returns the
+     * enriched copy to persist.
+     *
+     * The summary and the idiom extraction run as separate background jobs. Each one used to
+     * copy the article it started from and write that copy back, so whichever finished last
+     * threw away the other's result, on screen and in history. Enriching the *current* shown
+     * article instead keeps both. If the user has moved to another article, [base] is enriched
+     * and only persisted; the store merges it with what is already saved.
+     */
+    private fun enrichShownArticle(
+        base: CleanArticleResult,
+        enrich: (CleanArticleResult) -> CleanArticleResult
+    ): CleanArticleResult {
+        var result = enrich(base)
+        _uiState.update { state ->
+            val shown = state.cleanedArticle
+            if (shown != null && shown.isSameArticleAs(base)) {
+                result = enrich(shown)
+                state.copy(cleanedArticle = result)
+            } else {
+                result = enrich(base)
+                state
+            }
+        }
+        return result
+    }
+
     private fun cleanRawArticle(rawText: String) {
         val rawArticle = rawText.trim()
         if (rawArticle.isBlank()) return
@@ -481,20 +484,8 @@ class EnglishLearningViewModel(
             } catch (_: Throwable) {
                 emptyList()
             }
-            val articleToSave = if (detectedPhrases.isEmpty()) {
-                displayResult
-            } else {
-                displayResult.copy(idiomaticPhrases = detectedPhrases)
-            }
-
-            if (detectedPhrases.isNotEmpty()) {
-                _uiState.update { current ->
-                    if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
-                        current.copy(cleanedArticle = articleToSave)
-                    } else {
-                        current
-                    }
-                }
+            val articleToSave = enrichShownArticle(displayResult) { article ->
+                if (detectedPhrases.isEmpty()) article else article.copy(idiomaticPhrases = detectedPhrases)
             }
 
             runCatching { localStore.saveRecentArticle(articleToSave) }
@@ -554,4 +545,8 @@ private fun MutableStateFlow<EnglishLearningUiState>.updateMeaningIfStillSelecte
             current
         }
     }
+}
+
+private fun CleanArticleResult.isSameArticleAs(other: CleanArticleResult): Boolean {
+    return title == other.title && cleanArticle == other.cleanArticle
 }

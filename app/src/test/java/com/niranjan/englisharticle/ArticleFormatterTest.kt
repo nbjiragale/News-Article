@@ -62,4 +62,64 @@ class ArticleFormatterTest {
         assertFalse(recovered.cleanArticle.contains("Advertisement"))
         assertFalse(recovered.cleanArticle.contains("Subscribe"))
     }
+
+    @Test
+    fun postClean_keepsRealParagraphsThatMentionClutterWords() {
+        val paragraphs = listOf(
+            "The minister's comments drew sharp criticism from opposition leaders on Tuesday, who said the plan ignored farmers.",
+            "Officials said climate-related losses had doubled, and insurance premium costs were rising across the region.",
+            "She was promoted to chief executive last year after the company's shares jumped on strong quarterly results.",
+            "Facebook and YouTube said they would remove the videos, while Twitter did not respond to a request for comment.",
+            "His comments drew sharp criticism."
+        )
+        val aiOutput = paragraphs.joinToString("\n\n")
+
+        val cleaned = ArticleFormatter.postClean(aiOutput)
+
+        paragraphs.forEach { paragraph ->
+            assertTrue("Paragraph was dropped: $paragraph", cleaned.contains(paragraph))
+        }
+    }
+
+    @Test
+    fun postClean_stillRemovesShortClutterLines() {
+        val aiOutput = listOf(
+            "The council approved the new budget on Monday after a long debate.",
+            "Read more",
+            "Related stories",
+            "Follow us on Facebook",
+            "Story continues below advertisement",
+            "View comments",
+            "The budget sets aside more money for schools and roads next year."
+        ).joinToString("\n\n")
+
+        val cleaned = ArticleFormatter.postClean(aiOutput)
+
+        assertTrue(cleaned.contains("The council approved the new budget"))
+        assertTrue(cleaned.contains("The budget sets aside more money"))
+        assertFalse(cleaned.contains("Read more"))
+        assertFalse(cleaned.contains("Related stories"))
+        assertFalse(cleaned.contains("Follow us"))
+        assertFalse(cleaned.contains("Story continues"))
+        assertFalse(cleaned.contains("View comments"))
+    }
+
+    @Test
+    fun format_keepsLongBodyLinesThatMentionClutterWords() {
+        val rawArticle = """
+            Home
+            Advertisement
+            Minister responds to criticism
+            The minister's comments drew sharp criticism from opposition leaders on Tuesday.
+            Officials said the recommended changes would be promoted in schools from June.
+            Subscribe to our newsletter
+        """.trimIndent()
+
+        val formatted = ArticleFormatter.format(rawArticle)
+
+        assertTrue(formatted.contains("The minister's comments drew sharp criticism"))
+        assertTrue(formatted.contains("recommended changes would be promoted"))
+        assertFalse(formatted.contains("Subscribe"))
+        assertFalse(formatted.contains("Advertisement"))
+    }
 }

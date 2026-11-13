@@ -260,6 +260,9 @@ object ArticleFormatter {
     private fun String.isBoilerplateLine(): Boolean {
         if (unwantedLinePhrases.any { this == it }) return true
         if (strongBoilerplatePhrases.any { contains(it) }) return true
+        // Calls to action ("Sign up for free and get curated news updates") can be long, so
+        // the short-line rule below misses them, but article prose never starts this way.
+        if (callToActionPrefixes.any { startsWith(it) }) return true
 
         val wordCount = split(Regex("\\s+")).count { it.isNotBlank() }
         if (wordCount > MAX_SHORT_CLUTTER_WORDS) return false
@@ -285,7 +288,19 @@ object ArticleFormatter {
         "skip to content",
         "reproduction prohibited",
         "download the app",
-        "get our newsletter"
+        "get our newsletter",
+        "photo credit"
+    )
+
+    private val callToActionPrefixes = listOf(
+        "sign up ",
+        "subscribe to ",
+        "subscribe for ",
+        "log in ",
+        "login to ",
+        "click here",
+        "follow us ",
+        "download the "
     )
 
     private fun List<String>.trimToMainArticle(): List<String> {

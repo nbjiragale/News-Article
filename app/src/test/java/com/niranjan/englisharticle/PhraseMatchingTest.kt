@@ -143,4 +143,14 @@ class PhraseMatchingTest {
         assertEquals(2_000, chunks.sumOf { it.split(Regex("\\s+")).size })
         assertTrue(chunks.all { it.split(Regex("\\s+")).size <= 1_000 })
     }
+
+    @Test
+    fun formsOfBeAreMatchedDespiteBeingShortWords() {
+        // From a real article: the dictionary form "be yet to" must find "is yet to".
+        val article = "The State government is yet to decide whether the rolls should be used."
+        assertEquals(
+            listOf("is yet to"),
+            resolve(article, PhraseCandidate(text = "", base = "be yet to"))
+        )
+    }
 }

@@ -42,6 +42,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.components.EmptyState
 import com.niranjan.englisharticle.ui.components.Pill
+import com.niranjan.englisharticle.ui.theme.AppTheme
 import kotlin.random.Random
 
 @Composable
@@ -280,14 +281,19 @@ private fun MultipleChoicePractice(
             val isSelected = selectedKey == choice.savedKey
             val isCorrectChoice = selectedCorrect != null && choice.savedKey == current.savedKey
             val containerColor = when {
-                isCorrectChoice -> androidx.compose.ui.graphics.Color(0xFFD3F1E2)
+                isCorrectChoice -> AppTheme.extendedColors.successContainer
                 isSelected -> MaterialTheme.colorScheme.errorContainer
                 else -> MaterialTheme.colorScheme.surfaceContainerLow
             }
             val outline = when {
-                isCorrectChoice -> androidx.compose.ui.graphics.Color(0xFF1F9D6F)
+                isCorrectChoice -> AppTheme.extendedColors.success
                 isSelected -> MaterialTheme.colorScheme.error
                 else -> MaterialTheme.colorScheme.outlineVariant
+            }
+            val textColor = when {
+                isCorrectChoice -> AppTheme.extendedColors.onSuccessContainer
+                isSelected -> MaterialTheme.colorScheme.onErrorContainer
+                else -> MaterialTheme.colorScheme.onSurface
             }
             Surface(
                 onClick = {
@@ -296,8 +302,11 @@ private fun MultipleChoicePractice(
                 enabled = selectedCorrect == null,
                 shape = RoundedCornerShape(20.dp),
                 color = containerColor,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, outline),
+                contentColor = textColor,
+                border = androidx.compose.foundation.BorderStroke(
+                    if (isCorrectChoice || isSelected) 2.dp else 1.dp,
+                    outline
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 60.dp)
@@ -367,14 +376,14 @@ private fun FeedbackCard(
     correctAnswer: String
 ) {
     val container = if (isCorrect) {
-        androidx.compose.ui.graphics.Color(0xFFD3F1E2)
+        AppTheme.extendedColors.successContainer
     } else {
         MaterialTheme.colorScheme.errorContainer
     }
     val accent = if (isCorrect) {
-        androidx.compose.ui.graphics.Color(0xFF1F9D6F)
+        AppTheme.extendedColors.onSuccessContainer
     } else {
-        MaterialTheme.colorScheme.error
+        MaterialTheme.colorScheme.onErrorContainer
     }
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -392,9 +401,9 @@ private fun FeedbackCard(
                 color = accent
             )
             Text(
-                text = correctAnswer,
+                text = if (isCorrect) correctAnswer else "Answer: $correctAnswer",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                color = accent
             )
         }
     }
@@ -464,7 +473,7 @@ private fun PracticeCompleteState(
                 shape = RoundedCornerShape(28.dp)
             ) {
                 Text(
-                    "Practice Again",
+                    "Practice again",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )

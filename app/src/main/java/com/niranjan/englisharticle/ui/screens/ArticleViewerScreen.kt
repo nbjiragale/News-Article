@@ -18,11 +18,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,7 +68,7 @@ import com.niranjan.englisharticle.ui.components.ArticleListenButton
 import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
 import com.niranjan.englisharticle.ui.state.SelectedWord
-import com.niranjan.englisharticle.ui.theme.ArticleReadingFontFamily
+import com.niranjan.englisharticle.ui.theme.ArticleBodyTextStyle
 import com.niranjan.englisharticle.ui.tts.ArticlePlaybackState
 
 @Composable
@@ -137,6 +140,16 @@ fun ArticleViewerScreen(
     }
     LaunchedEffect(highlightingEnabled) {
         highlightPrefs.edit().putBoolean(HIGHLIGHT_PREF_KEY, highlightingEnabled).apply()
+    }
+    // The reader's main gesture (tap a word, long-press for the sentence) was never explained
+    // anywhere. Show a tip until the user dismisses it or looks up their first word.
+    var showGestureTip by remember {
+        mutableStateOf(!highlightPrefs.getBoolean(GESTURE_TIP_DISMISSED_KEY, false))
+    }
+    fun dismissGestureTip() {
+        if (!showGestureTip) return
+        showGestureTip = false
+        highlightPrefs.edit().putBoolean(GESTURE_TIP_DISMISSED_KEY, true).apply()
     }
     val effectiveWordIndex = if (highlightingEnabled) currentWordIndex else null
     // Only the paragraph that contains the spoken word needs the live index; every other paragraph
@@ -228,6 +241,9 @@ fun ArticleViewerScreen(
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         ArticleHeader(article)
+                        if (showGestureTip) {
+                            GestureTip(onDismiss = ::dismissGestureTip)
+                        }
                         ArticleSummaryCard(
                             summary = article.summary,
                             isLoading = isSummarizing,
@@ -250,7 +266,10 @@ fun ArticleViewerScreen(
                         paragraphFirstWordIndex = paragraphWordOffsets.getOrElse(paraIndex) { 0 },
                         currentWordIndex = if (paraIndex == activeParagraphIndex) effectiveWordIndex else null,
                         lookedUpWords = lookedUpSnapshot,
-                        onWordLookedUp = { lookedUpWords.add(it) },
+                        onWordLookedUp = {
+                            lookedUpWords.add(it)
+                            dismissGestureTip()
+                        },
                         onWordTap = onWordTap
                     )
                 }
@@ -332,6 +351,46 @@ private fun HighlightToggleButton(
 
 private const val HIGHLIGHT_PREFS_NAME = "article_viewer_prefs"
 private const val HIGHLIGHT_PREF_KEY = "highlight_word_enabled"
+private const val GESTURE_TIP_DISMISSED_KEY = "gesture_tip_dismissed"
+
+@Composable
+private fun GestureTip(onDismiss: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_languages),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Tap") }
+                    append(" any word for its Kannada meaning. ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Long-press") }
+                    append(" to translate the whole sentence.")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_circle_x),
+                    contentDescription = "Dismiss tip",
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun InteractiveParagraph(
@@ -403,7 +462,7 @@ private fun InteractiveParagraph(
                     onLongPress = { position -> openMeaning(position, showSentence = true) }
                 )
             },
-        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = ArticleReadingFontFamily),
+        style = ArticleBodyTextStyle,
         fontStyle = if (isQuote) FontStyle.Italic else FontStyle.Normal,
         color = MaterialTheme.colorScheme.onSurface,
         onTextLayout = { textLayoutResult = it }

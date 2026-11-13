@@ -97,6 +97,38 @@ fun EnglishLearningApp(
         }
     }
 
+    // One definition for both places the home screen appears (its own route, and the reader
+    // route when no article is loaded), so the two can no longer drift apart.
+    @Composable
+    fun HomeScreen() {
+        val latestArticle = recentArticles.firstOrNull()
+        ArticleInputScreen(
+            article = uiState.draftArticle,
+            onArticleChange = viewModel::updateDraftArticle,
+            onLoadArticle = viewModel::cleanDraftArticle,
+            isCleaning = uiState.isCleaningArticle,
+            cleaningError = uiState.cleaningError,
+            onRetry = viewModel::retryCleanArticle,
+            onClearArticle = viewModel::clearArticleText,
+            onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
+            onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
+            onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
+            latestArticleTitle = latestArticle?.title,
+            onContinueReading = {
+                if (latestArticle != null) {
+                    viewModel.openRecentArticle(latestArticle)
+                    navController.navigateSingleTop(AppRoute.Reader)
+                }
+            },
+            youTubeUrl = uiState.draftYouTubeUrl,
+            onYouTubeUrlChange = viewModel::updateDraftYouTubeUrl,
+            onImportYouTube = viewModel::importYouTubeUrl,
+            isImportingYouTube = uiState.isImportingYouTube,
+            youTubeError = uiState.youTubeError,
+            onDismissYouTubeError = viewModel::dismissYouTubeError
+        )
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
@@ -128,46 +160,12 @@ fun EnglishLearningApp(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(AppRoute.Input) {
-                ArticleInputScreen(
-                    article = uiState.draftArticle,
-                    onArticleChange = viewModel::updateDraftArticle,
-                    onLoadArticle = viewModel::cleanDraftArticle,
-                    isCleaning = uiState.isCleaningArticle,
-                    cleaningError = uiState.cleaningError,
-                    onRetry = viewModel::retryCleanArticle,
-                    onClearArticle = viewModel::clearArticleText,
-                    onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
-                    onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
-                    onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
-                    youTubeUrl = uiState.draftYouTubeUrl,
-                    onYouTubeUrlChange = viewModel::updateDraftYouTubeUrl,
-                    onImportYouTube = viewModel::importYouTubeUrl,
-                    isImportingYouTube = uiState.isImportingYouTube,
-                    youTubeError = uiState.youTubeError,
-                    onDismissYouTubeError = viewModel::dismissYouTubeError
-                )
+                HomeScreen()
             }
             composable(AppRoute.Reader) {
                 val currentArticle = uiState.cleanedArticle
                 if (currentArticle == null) {
-                    ArticleInputScreen(
-                        article = uiState.draftArticle,
-                        onArticleChange = viewModel::updateDraftArticle,
-                        onLoadArticle = viewModel::cleanDraftArticle,
-                        isCleaning = uiState.isCleaningArticle,
-                        cleaningError = uiState.cleaningError,
-                        onRetry = viewModel::retryCleanArticle,
-                        onClearArticle = viewModel::clearArticleText,
-                        onOpenRecents = { navController.navigateSingleTop(AppRoute.Recents) },
-                        onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
-                        onOpenPractice = { navController.navigateSingleTop(AppRoute.Practice) },
-                        youTubeUrl = uiState.draftYouTubeUrl,
-                        onYouTubeUrlChange = viewModel::updateDraftYouTubeUrl,
-                        onImportYouTube = viewModel::importYouTubeUrl,
-                        isImportingYouTube = uiState.isImportingYouTube,
-                        youTubeError = uiState.youTubeError,
-                        onDismissYouTubeError = viewModel::dismissYouTubeError
-                    )
+                    HomeScreen()
                 } else {
                     val playbackState by textToSpeech.playbackState
                     val currentWordIndex by textToSpeech.currentWordIndex

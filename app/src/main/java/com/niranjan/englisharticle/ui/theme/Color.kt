@@ -58,5 +58,26 @@ val OnErrorContainer = Color(0xFF5C0B0B)
 // Scrim / overlay
 val Scrim = Color(0xFF14201B)
 
-// Direct alias used in screens (ArticleInputScreen)
-val AppSurfaceContainerLowest = SurfaceContainerLowest
+// Success — correct practice answers. Darker than the brand emerald so the text passes
+// contrast on its own container.
+val SuccessLight            = Color(0xFF17694D)
+val SuccessContainerLight   = Color(0xFFD3F1E2)
+val OnSuccessContainerLight = Color(0xFF0A3D2E)
+
+// Dark surface tiers (emerald-tinted near-blacks). The dark scheme used to leave these
+// unset, so Material filled them with its default purple-grey baseline.
+val DarkSurface                = Color(0xFF101513)
+val DarkSurfaceContainerLowest = Color(0xFF0B0F0D)
+val DarkSurfaceContainerLow    = Color(0xFF171D1A)
+val DarkSurfaceContainer       = Color(0xFF1B221F)
+val DarkSurfaceContainerHigh   = Color(0xFF252D29)
+val DarkSurfaceContainerHighest = Color(0xFF303834)
+
+val ErrorDark            = Color(0xFFFFB4A9)
+val OnErrorDark          = Color(0xFF5F150D)
+val ErrorContainerDark   = Color(0xFF7D2B22)
+val OnErrorContainerDark = Color(0xFFFFDAD4)
+
+val SuccessDark            = Color(0xFF8FDCB9)
+val SuccessContainerDark   = Color(0xFF0F4A36)
+val OnSuccessContainerDark = Color(0xFFCDEBDD)

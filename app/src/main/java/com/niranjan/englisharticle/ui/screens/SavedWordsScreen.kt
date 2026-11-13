@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -24,8 +25,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +53,37 @@ fun SavedWordsScreen(
     onDeleteWord: (SavedWord) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Deleting a saved word also erases its practice history, so it is confirmed first.
+    var pendingDelete by remember { mutableStateOf<SavedWord?>(null) }
+    pendingDelete?.let { word ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete \u201C${word.word}\u201D?") },
+            text = {
+                Text(
+                    if (word.practiceAttempts > 0) {
+                        "This also removes its practice history (${word.practiceAttempts} attempts)."
+                    } else {
+                        "It will be removed from your saved words and practice deck."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDelete = null
+                        onDeleteWord(word)
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -86,7 +122,7 @@ fun SavedWordsScreen(
                         EmptyState(
                             iconRes = R.drawable.ic_bookmark_plus,
                             title = "No saved words yet",
-                            body = "Tap a word or phrase in any article and use \"Save Word\" — it will appear here for practice.",
+                            body = "Tap a word or phrase in any article, then tap \u201CSave\u201D. It will appear here for practice.",
                             iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                             iconTint = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -99,7 +135,7 @@ fun SavedWordsScreen(
                 ) { savedWord ->
                     SavedWordCard(
                         savedWord = savedWord,
-                        onDelete = { onDeleteWord(savedWord) }
+                        onDelete = { pendingDelete = savedWord }
                     )
                 }
             }
@@ -154,7 +190,7 @@ private fun SavedWordsHeader(
             )
             Spacer(Modifier.size(10.dp))
             Text(
-                "Start Practice",
+                "Start practice",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )

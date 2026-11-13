@@ -22,6 +22,19 @@ val AppFontFamily = FontFamily(
 // Replace with a Newsreader FontFamily if you add those assets.
 val ArticleReadingFontFamily = FontFamily.Serif
 
+/**
+ * Article body text. Larger than bodyLarge (16sp): this is long-form reading by language
+ * learners, who also tap individual words, so both legibility and tap size matter. 18sp with
+ * a 1.67 line height matches common reading-app defaults.
+ */
+val ArticleBodyTextStyle = TextStyle(
+    fontFamily = ArticleReadingFontFamily,
+    fontWeight = FontWeight.Normal,
+    fontSize = 18.sp,
+    lineHeight = 30.sp,
+    letterSpacing = 0.sp
+)
+
 // ── Typography scale ───────────────────────────────────────────
 
 val AppTypography = Typography(

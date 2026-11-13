@@ -5,6 +5,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 private val LightColorScheme = lightColorScheme(
@@ -39,7 +42,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerLow    = SurfaceContainerLow,
     surfaceContainer       = SurfaceContainer,
     surfaceContainerHigh   = SurfaceContainerHigh,
-    surfaceContainerHighest = Stone50,
+    surfaceContainerHighest = Stone100,
 
     // ── Inverse ───────────────────────────────────────────────
     inverseSurface         = Stone900,
@@ -60,8 +63,9 @@ private val LightColorScheme = lightColorScheme(
     scrim                  = Scrim,
 )
 
-// Dark scheme keeps the same emerald logic on dark stone surfaces.
-// Currently ArthaReader ships light-only; dark kept for system compat.
+// Dark scheme: the same emerald logic on emerald-tinted near-black surfaces. Every role is
+// set explicitly; any role left out falls back to Material's purple-grey baseline, which is
+// what the app used to show in dark mode.
 private val DarkColorScheme = darkColorScheme(
     primary                = Emerald400,
     onPrimary              = Emerald900,
@@ -70,29 +74,68 @@ private val DarkColorScheme = darkColorScheme(
 
     secondary              = Emerald200,
     onSecondary            = Emerald900,
-    secondaryContainer     = Emerald800,
+    secondaryContainer     = Color(0xFF233A30),
     onSecondaryContainer   = Emerald100,
 
     tertiary               = Plum200,
     onTertiary             = Stone950,
-    tertiaryContainer      = Plum700,
+    tertiaryContainer      = Color(0xFF4E3858),
     onTertiaryContainer    = Plum100,
 
-    background             = Stone950,
+    background             = DarkSurface,
     onBackground           = Stone50,
-    surface                = Stone950,
+    surface                = DarkSurface,
     onSurface              = Stone50,
-    surfaceVariant         = Stone900,
+    surfaceVariant         = DarkSurfaceContainerHigh,
     onSurfaceVariant       = Stone200,
 
-    outline                = Stone500,
-    outlineVariant         = Stone700,
+    surfaceContainerLowest = DarkSurfaceContainerLowest,
+    surfaceContainerLow    = DarkSurfaceContainerLow,
+    surfaceContainer       = DarkSurfaceContainer,
+    surfaceContainerHigh   = DarkSurfaceContainerHigh,
+    surfaceContainerHighest = DarkSurfaceContainerHighest,
 
-    error                  = ErrorRed,
-    onError                = OnError,
-    errorContainer         = Color(0xFF5C0B0B),
-    onErrorContainer       = ErrorContainer,
+    inverseSurface         = Stone50,
+    inverseOnSurface       = Stone900,
+    inversePrimary         = Emerald700,
+
+    outline                = Stone400,
+    outlineVariant         = Color(0xFF2E3833),
+
+    error                  = ErrorDark,
+    onError                = OnErrorDark,
+    errorContainer         = ErrorContainerDark,
+    onErrorContainer       = OnErrorContainerDark,
+
+    scrim                  = Color.Black,
 )
+
+/** Colors Material's scheme has no role for. Read them through [AppTheme.extendedColors]. */
+@Immutable
+data class ExtendedColors(
+    val success: Color,
+    val successContainer: Color,
+    val onSuccessContainer: Color
+)
+
+private val LightExtendedColors = ExtendedColors(
+    success = SuccessLight,
+    successContainer = SuccessContainerLight,
+    onSuccessContainer = OnSuccessContainerLight
+)
+
+private val DarkExtendedColors = ExtendedColors(
+    success = SuccessDark,
+    successContainer = SuccessContainerDark,
+    onSuccessContainer = OnSuccessContainerDark
+)
+
+private val LocalExtendedColors = staticCompositionLocalOf { LightExtendedColors }
+
+object AppTheme {
+    val extendedColors: ExtendedColors
+        @Composable get() = LocalExtendedColors.current
+}
 
 @Composable
 fun EnglishArticleTheme(
@@ -100,11 +143,14 @@ fun EnglishArticleTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography   = AppTypography,
-        shapes       = AppShapes,
-        content      = content
-    )
+    CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography   = AppTypography,
+            shapes       = AppShapes,
+            content      = content
+        )
+    }
 }

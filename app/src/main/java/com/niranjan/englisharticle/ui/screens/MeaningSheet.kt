@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,6 +41,7 @@ import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.domain.MeaningResult
 import com.niranjan.englisharticle.ui.components.HighlightedSentence
+import com.niranjan.englisharticle.ui.components.SkeletonBlock
 import com.niranjan.englisharticle.ui.state.MeaningUiState
 
 @Composable
@@ -86,15 +86,26 @@ fun MeaningSheet(
         when (state) {
             MeaningUiState.Idle,
             MeaningUiState.Loading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(34.dp),
-                        color = MaterialTheme.colorScheme.primary
+                // Placeholder in the shape of the result cards, so the sheet does not jump
+                // from a small spinner to a tall layout when the meaning arrives.
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SkeletonBlock(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(92.dp),
+                        cornerRadius = 20
+                    )
+                    SkeletonBlock(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(92.dp),
+                        cornerRadius = 20
+                    )
+                    SkeletonBlock(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        cornerRadius = 20
                     )
                 }
             }
@@ -229,7 +240,12 @@ private fun MeaningSheetHeader(
         ) {
             Text(
                 text = word,
-                style = MaterialTheme.typography.displaySmall,
+                // Phrases wrap badly at 36sp; scale the headword down as it gets longer.
+                style = when {
+                    word.length <= 14 -> MaterialTheme.typography.displaySmall
+                    word.length <= 28 -> MaterialTheme.typography.headlineMedium
+                    else -> MaterialTheme.typography.headlineSmall
+                },
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (partOfSpeech.isNotBlank()) {
@@ -280,7 +296,7 @@ private fun MeaningSummary(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         MeaningInfoCard(
-            label = if (showSentence) "Tapped Word Meaning" else "Kannada Meaning",
+            label = if (showSentence) "Word meaning" else "Kannada meaning",
             value = result.meaningKannada,
             emphasize = true,
             activeSpeechText = activeSpeechText,
@@ -451,14 +467,14 @@ private fun SmallSpeakButton(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = Modifier.size(32.dp)
+        modifier = Modifier.size(40.dp)
     ) {
         Icon(
             painter = painterResource(
                 if (isSpeaking) R.drawable.ic_stop_square else R.drawable.ic_volume_2
             ),
             contentDescription = if (isSpeaking) "Stop reading" else contentDescription,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(20.dp),
             tint = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
         )
     }

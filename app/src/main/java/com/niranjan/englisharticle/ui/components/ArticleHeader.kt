@@ -18,10 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.articleWordCount
 
@@ -35,30 +33,31 @@ import com.niranjan.englisharticle.domain.articleWordCount
  */
 @Composable
 fun ArticleHeader(article: CleanArticleResult) {
-    val author = article.author.ifBlank { stringResource(R.string.app_name) }
-    val published = article.publishedDate.ifBlank { "Ready to read" }
-    val title = article.title.ifBlank { "Clean Reading Article" }
-    val readMinutes = (article.cleanArticle.articleWordCount() / 220).coerceAtLeast(1)
+    // Only real metadata is shown. The header used to invent an author (the app's name),
+    // a date ("Ready to read") and a "News" tag for every article, YouTube videos included.
+    val author = article.author.trim()
+    val published = article.publishedDate.trim()
+    val title = article.title.ifBlank { "Untitled article" }
+    val wordCount = article.cleanArticle.articleWordCount()
+    val readMinutes = (wordCount / 220).coerceAtLeast(1)
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ArticlePill(
-                text = "News",
-                background = MaterialTheme.colorScheme.primaryContainer,
-                content = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            ArticlePill(
-                text = "$readMinutes min read",
-                background = MaterialTheme.colorScheme.surfaceContainer,
-                content = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        ArticlePill(
+            text = "$readMinutes min read · $wordCount words",
+            background = MaterialTheme.colorScheme.primaryContainer,
+            content = MaterialTheme.colorScheme.onPrimaryContainer
+        )
         Text(
+            // displaySmall (36sp) turned long headlines into a full screen of title text.
             text = title,
-            style = MaterialTheme.typography.displaySmall,
+            style = if (title.length > 70) {
+                MaterialTheme.typography.headlineMedium
+            } else {
+                MaterialTheme.typography.headlineLarge
+            },
             color = MaterialTheme.colorScheme.onSurface
         )
         if (article.subtitle.isNotBlank()) {
@@ -68,37 +67,43 @@ fun ArticleHeader(article: CleanArticleResult) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Row(
+        if (author.isNotEmpty() || published.isNotEmpty()) Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = author.initials(),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            if (author.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = author.initials(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = author,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = published,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (author.isNotEmpty()) {
+                    Text(
+                        text = author,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (published.isNotEmpty()) {
+                    Text(
+                        text = published,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -132,5 +137,4 @@ private fun String.initials(): String {
     return parts
         .take(2)
         .joinToString("") { it.first().uppercaseChar().toString() }
-        .ifBlank { "LN" }
 }

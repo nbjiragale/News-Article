@@ -92,7 +92,7 @@ private fun SummaryHeader() {
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = "Article Context",
+                text = "Article context",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -191,14 +191,15 @@ private fun SummaryLine(
                 }
             )
         }
+        // 40dp: 32dp was below a comfortable touch size for a button this close to text.
         IconButton(
             onClick = onSpeak,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(40.dp)
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_volume_2),
                 contentDescription = "Read aloud",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.tertiary
             )
         }

@@ -167,6 +167,72 @@ fun String.findSentenceContaining(index: Int): String {
 }
 
 /**
+ * The text around the tapped position that a word lookup needs: the tapped sentence plus
+ * the sentence before and after it, never leaving the paragraph (a line of the body), and
+ * at most [maxWords] words.
+ *
+ * Lookups used to send the whole article on every tap. Picking the right sense of a word
+ * needs only its surroundings, so this cuts each request from the article's full length to
+ * a few hundred tokens. When the cap bites, the neighbouring sentences are trimmed from
+ * their far ends first; a run-on "sentence" longer than the cap (unpunctuated captions) is
+ * cut to a window centred on the tapped word.
+ */
+fun String.contextAround(index: Int, maxWords: Int = MEANING_CONTEXT_MAX_WORDS): String {
+    if (isBlank()) return ""
+    val safeIndex = index.coerceIn(indices)
+    val paragraphStart = lastIndexOf('\n', safeIndex - 1).let { if (it == -1) 0 else it + 1 }
+    val paragraphEnd = indexOf('\n', safeIndex).let { if (it == -1) length else it }
+    val paragraph = substring(paragraphStart, paragraphEnd)
+    val offsetInParagraph = safeIndex - paragraphStart
+
+    // Sentences with their positions in the paragraph.
+    val sentences = paragraph.splitIntoSentences()
+    val ranges = mutableListOf<IntRange>()
+    var cursor = 0
+    for (sentence in sentences) {
+        val start = paragraph.indexOf(sentence, cursor).takeIf { it >= 0 } ?: cursor
+        ranges += start until start + sentence.length
+        cursor = start + sentence.length
+    }
+    if (sentences.isEmpty()) return paragraph.trim().wordWindowAround(offsetInParagraph, maxWords)
+    val tapped = ranges.indexOfFirst { offsetInParagraph <= it.last }.let { if (it == -1) ranges.lastIndex else it }
+
+    val current = sentences[tapped]
+    val currentWords = current.words()
+    if (currentWords.size >= maxWords) {
+        return current.wordWindowAround(offsetInParagraph - ranges[tapped].first, maxWords)
+    }
+
+    val budget = maxWords - currentWords.size
+    val previousWords = sentences.getOrNull(tapped - 1)?.words().orEmpty()
+    val nextWords = sentences.getOrNull(tapped + 1)?.words().orEmpty()
+    // Share the remaining budget, giving any unused share to the other side.
+    var previousTake = minOf(previousWords.size, budget / 2)
+    val nextTake = minOf(nextWords.size, budget - previousTake)
+    previousTake = minOf(previousWords.size, budget - nextTake)
+
+    return listOf(
+        previousWords.takeLast(previousTake).joinToString(" "),
+        current,
+        nextWords.take(nextTake).joinToString(" ")
+    ).filter { it.isNotBlank() }.joinToString(" ")
+}
+
+/** Upper bound on the nearby text sent with a word lookup. */
+const val MEANING_CONTEXT_MAX_WORDS = 120
+
+private fun String.words(): List<String> = trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+/** [maxWords] words of this text centred on the word at [offset]. */
+private fun String.wordWindowAround(offset: Int, maxWords: Int): String {
+    val matches = Regex("\\S+").findAll(this).toList()
+    if (matches.size <= maxWords) return trim()
+    val tappedWord = matches.indexOfFirst { offset <= it.range.last }.let { if (it == -1) matches.lastIndex else it }
+    val start = (tappedWord - maxWords / 2).coerceIn(0, matches.size - maxWords)
+    return matches.subList(start, start + maxWords).joinToString(" ") { it.value }
+}
+
+/**
  * Splits running text into sentences. A '.' ends a sentence only when whitespace (or the end)
  * follows and it does not close an abbreviation ("Mr.", "Dr.", "etc."), an initial or a dotted
  * abbreviation ("J.", "U.S.", "e.g."). Decimals ("3.5%") and web addresses never split, since

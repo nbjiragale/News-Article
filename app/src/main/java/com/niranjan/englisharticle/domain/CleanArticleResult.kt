@@ -11,10 +11,19 @@ data class CleanArticleResult(
     val idiomaticPhrases: List<String> = emptyList(),
     val summary: ArticleSummary? = null
 ) {
-    fun contextForMeaning(): String {
-        return listOf(title, subtitle, author, publishedDate, cleanArticle)
-            .filter { it.isNotBlank() }
-            .joinToString("\n\n")
+    /**
+     * What a word lookup sends as context: the title, the short summary when there is one,
+     * and [nearbyText] (see [contextAround]). It used to send the whole article body on every
+     * tap; the nearby text is enough to pick the right sense, and the title and summary keep
+     * the topic and who's who in view.
+     */
+    fun contextForMeaning(nearbyText: String): String {
+        val gist = summary?.whatHappenedEnglish.orEmpty()
+        return listOfNotNull(
+            title.takeIf { it.isNotBlank() }?.let { "Title: $it" },
+            gist.takeIf { it.isNotBlank() }?.let { "Summary: $it" },
+            nearbyText.takeIf { it.isNotBlank() }?.let { "Nearby text: $it" }
+        ).joinToString("\n")
     }
 
     fun looksSummarizedComparedTo(rawText: String): Boolean {

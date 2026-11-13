@@ -41,9 +41,30 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // No OpenRouter or Deepgram keys here: anything in BuildConfig ships inside the APK,
-        // where anyone can extract it. The keys live on the app's own server (server/), and
-        // the app calls that. The model is also chosen there.
+        // Two ways to reach OpenRouter and Deepgram (see data/ApiAccess.kt):
+        //
+        // 1. Direct, for a personal build: put your keys here. Anything in BuildConfig ships
+        //    inside the APK, where anyone who gets the APK can extract it, so never share
+        //    that APK, and set spending limits on both keys.
+        // 2. Server: set api.base.url (and api.app.token) to the server in server/, which
+        //    holds the keys. Required before giving the app to anyone else.
+        //
+        // If api.base.url is set it wins, and the keys below are not used.
+        buildConfigField(
+            "String",
+            "OPENROUTER_API_KEY",
+            (localProperties.getProperty("openrouter.api.key") ?: "").asBuildConfigString()
+        )
+        buildConfigField(
+            "String",
+            "OPENROUTER_MODEL",
+            (localProperties.getProperty("openrouter.model") ?: "google/gemini-2.5-flash").asBuildConfigString()
+        )
+        buildConfigField(
+            "String",
+            "DEEPGRAM_API_KEY",
+            (localProperties.getProperty("deepgram.api.key") ?: "").asBuildConfigString()
+        )
         buildConfigField(
             "String",
             "API_BASE_URL",

@@ -25,9 +25,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # The build reads the API server address and app token from local.properties.
-      # CI has neither: they are only needed at runtime, and an empty value still
-      # produces a valid BuildConfig field, so compilation is unaffected.
+      # The build reads API keys or the API server address from local.properties.
+      # CI has none and must not have any: they are only needed at runtime, and an
+      # empty value still produces a valid BuildConfig field, so compilation is unaffected.
       - name: Create empty local.properties
         run: touch local.properties
 

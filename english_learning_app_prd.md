@@ -153,12 +153,10 @@ Return JSON:
 
 ## 🔐 API Key Handling
 
-- The OpenRouter and Deepgram keys live only on the app's API server (`server/`, a
-  Cloudflare Worker), as Worker secrets. The model is chosen there too.
-- The app calls that server. `local.properties` holds only:
-  - `api.base.url` — the server's address
-  - `api.app.token` — must match the server's `APP_TOKEN` secret (ships in the APK; rotatable, not a money secret)
-  - `deepgram.enabled`, `deepgram.voice`, `deepgram.audio.offset.ms`, `deepgram.word.timings` — read-aloud options
+- Two setups, chosen in `local.properties` (see `data/ApiAccess.kt`):
+  - **Personal (direct):** `openrouter.api.key`, `openrouter.model`, `deepgram.api.key`. The app calls OpenRouter and Deepgram itself; the keys ship inside the APK, so the APK must not be shared.
+  - **Shared (server):** `api.base.url` and `api.app.token`. The keys live only on the app's API server (`server/`, a Cloudflare Worker), which also chooses the model. Takes priority when set.
+- Read-aloud options for both: `deepgram.enabled`, `deepgram.voice`, `deepgram.audio.offset.ms`, `deepgram.word.timings`
 
 ---
 

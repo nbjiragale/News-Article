@@ -34,14 +34,32 @@ You can:
 
 1. Clone the repo.
 2. Open the project in Android Studio.
-3. Deploy the API server once (see [`server/README.md`](server/README.md)). It holds the
-   OpenRouter and Deepgram keys; **the app never contains them**.
-4. Add/update `local.properties` in project root:
+3. Add/update `local.properties` in project root. Pick **one** of the two setups.
+
+**A. Personal build (no server).** The app calls OpenRouter and Deepgram with your keys:
+
+```properties
+openrouter.api.key=YOUR_OPENROUTER_KEY
+openrouter.model=google/gemini-2.5-flash
+deepgram.api.key=YOUR_DEEPGRAM_KEY
+```
+
+The keys end up inside the APK. Anyone who gets that APK can extract them, so **never
+share the APK**, and set spending limits on both keys.
+
+**B. Shared build (with the server).** Deploy the server in [`server/README.md`](server/README.md)
+once; it holds the keys and the app never contains them:
 
 ```properties
 api.base.url=https://arthareader-api.YOUR-SUBDOMAIN.workers.dev
 api.app.token=THE_SAME_VALUE_AS_THE_SERVER_APP_TOKEN
+```
 
+If `api.base.url` is set, the app uses the server and ignores the keys.
+
+Read-aloud options (both setups):
+
+```properties
 deepgram.enabled=true
 deepgram.voice=aura-asteria-en
 deepgram.audio.offset.ms=0
@@ -49,13 +67,11 @@ deepgram.word.timings=false
 ```
 
 Notes:
-- `api.base.url` is required for article cleanup, summaries, meanings and idioms.
-- `api.app.token` must match the server's `APP_TOKEN` secret.
-- `deepgram.enabled=false` always uses the phone's own voice for read-aloud.
+- Without an OpenRouter key (A) or a server (B), article cleanup, summaries, meanings and
+  idioms do not work.
+- Without Deepgram, or with `deepgram.enabled=false`, read-aloud uses the phone's own voice.
 - `deepgram.word.timings=true` pays for a second Deepgram call per audio chunk to get exact
   read-along highlight timings; off by default.
-- Do **not** put OpenRouter or Deepgram keys in `local.properties` any more: anything in
-  `BuildConfig` ships inside the APK.
 
 ---
 

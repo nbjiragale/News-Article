@@ -6,9 +6,16 @@ import com.niranjan.englisharticle.domain.ArticleSummary
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
+import com.niranjan.englisharticle.domain.PhraseCandidate
+import com.niranjan.englisharticle.domain.resolvePhraseSpans
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
@@ -153,52 +160,84 @@ class OpenRouterArticleService(
         )
     }
 
+    /**
+     * Finds the idioms, phrasal verbs and fixed expressions a learner needs explained, and
+     * returns them in the article's own wording (see [resolvePhraseSpans]).
+     *
+     * Long articles are sent in chunks of about [PHRASE_CHUNK_WORDS] words: in one long
+     * request the model reports far fewer phrases. Chunks run in parallel, a few at a time;
+     * a failed chunk is skipped, and only if every chunk fails is an error thrown.
+     */
     override suspend fun extractIdiomaticPhrases(articleText: String): List<String> {
         if (articleText.isBlank()) return emptyList()
 
+        val chunks = articleText.phraseChunks(PHRASE_CHUNK_WORDS)
+        val limiter = Semaphore(MAX_PARALLEL_PHRASE_REQUESTS)
+        val results = supervisorScope {
+            chunks.map { chunk ->
+                async {
+                    limiter.withPermit {
+                        try {
+                            Result.success(requestPhraseCandidates(chunk))
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (error: Throwable) {
+                            Log.w(TAG, "Phrase detection failed for one chunk", error)
+                            Result.failure(error)
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+
+        if (results.all { it.isFailure }) {
+            throw results.first().exceptionOrNull() ?: IllegalStateException("Phrase detection failed.")
+        }
+        val candidates = results.flatMap { it.getOrNull().orEmpty() }
+        return resolvePhraseSpans(articleText, candidates)
+    }
+
+    private suspend fun requestPhraseCandidates(text: String): List<PhraseCandidate> {
         val content = sendJsonChatRequest(
             systemMessage = """
-                Act as a linguistic expert.
+                You are an English teacher marking a news text for an intermediate learner whose first language is Kannada.
                 Return only valid JSON.
             """.trimIndent(),
             userMessage = """
-                Extract all idiomatic phrases, colloquialisms, proverbs, and multi-word metaphors from the provided text.
+                Find every multi-word expression in the text whose meaning a learner could NOT work out from the individual words.
 
-                Guidelines:
-                - Ignore literal descriptions; focus on figurative language.
-                - Identify multi-word expressions that lose their meaning if split.
-                - Return the exact phrase as it appears in the provided text whenever possible.
-                - If a phrase is partially detected, return the complete phrase span from the text.
-                - Do not return ordinary noun phrases or literal collocations.
-                - Do not add commentary.
+                Include these types:
+                - "idiom": figurative expressions. Examples: bite the bullet, in hot water, a drop in the ocean, turn the corner.
+                - "phrasal_verb": verb + particle with a special meaning. Examples: carry out, look into, set up, call off, step down, rule out, bring about.
+                - "fixed_expression": fixed multi-word phrases. Examples: in the wake of, on the other hand, take into account, come under fire, in charge of, at stake.
 
-                Detection examples:
-                Input: I decided to hit the hay early.
-                Output: ["hit the hay"]
-                Input: It's water under the bridge now.
-                Output: ["water under the bridge"]
-                Input: He was pulling my leg about the news.
-                Output: ["pulling my leg"]
-                Input: We need to cut to the chase.
-                Output: ["cut to the chase"]
+                Never include:
+                - Names of people, places, organisations, titles or events (Prime Minister, Wall Street, World Cup).
+                - Ordinary noun phrases or adjective + noun pairs (economic growth, strong demand).
+                - Literal phrasal verbs whose meaning is obvious (walk in, sit down, go back).
+                - Single words.
 
-                Return JSON:
-                {
-                  "phrases": []
-                }
+                For each expression return:
+                - "text": copied EXACTLY from the text, same words and same order, including any words inside it (for example "turned the offer down").
+                - "base": the dictionary form (for example "turn down").
+                - "type": one of "idiom", "phrasal_verb", "fixed_expression".
+
+                Example:
+                Text: Officials will look into the claims after the minister came under fire for biting the bullet on taxes.
+                Output: {"phrases": [
+                  {"text": "look into", "base": "look into", "type": "phrasal_verb"},
+                  {"text": "came under fire", "base": "come under fire", "type": "fixed_expression"},
+                  {"text": "biting the bullet", "base": "bite the bullet", "type": "idiom"}
+                ]}
+
+                Return JSON in exactly this shape: {"phrases": [ ... ]}
+                Return {"phrases": []} if there are none. Do not add commentary.
 
                 Text:
-                $articleText
+                $text
             """.trimIndent()
         )
-
-        return parseModelJson(content)
-            .optJSONArray("phrases")
-            ?.toStringList()
-            ?.map { it.trim() }
-            ?.filter { it.isValidDetectedPhrase(articleText) }
-            ?.distinctBy { it.lowercase() }
-            .orEmpty()
+        return PhraseCandidate.listFromJson(parseModelJson(content))
     }
 
     override suspend fun summarizeArticle(articleText: String): ArticleSummary {
@@ -489,17 +528,37 @@ class OpenRouterArticleService(
 
     private companion object {
         private const val TAG = "OpenRouterService"
+        private const val PHRASE_CHUNK_WORDS = 1_500
+        private const val MAX_PARALLEL_PHRASE_REQUESTS = 3
     }
 }
 
-private fun JSONArray.toStringList(): List<String> {
-    return (0 until length()).mapNotNull { index ->
-        optString(index).takeIf { it.isNotBlank() }
+/**
+ * Splits text into chunks of about [maxWords] words, breaking only between paragraphs (or,
+ * for a single huge paragraph, between sentences).
+ */
+internal fun String.phraseChunks(maxWords: Int): List<String> {
+    val paragraphs = split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
+    val units = paragraphs.flatMap { paragraph ->
+        if (paragraph.wordCount() <= maxWords) listOf(paragraph)
+        else paragraph.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
     }
+    val chunks = mutableListOf<String>()
+    val current = StringBuilder()
+    var currentWords = 0
+    for (unit in units) {
+        val words = unit.wordCount()
+        if (currentWords > 0 && currentWords + words > maxWords) {
+            chunks += current.toString()
+            current.clear()
+            currentWords = 0
+        }
+        if (current.isNotEmpty()) current.append("\n\n")
+        current.append(unit)
+        currentWords += words
+    }
+    if (current.isNotEmpty()) chunks += current.toString()
+    return chunks
 }
 
-private fun String.isValidDetectedPhrase(articleText: String): Boolean {
-    val wordCount = trim().split(Regex("\\s+"))
-        .count { token -> token.any { it.isLetter() } }
-    return wordCount >= 2 && articleText.contains(this, ignoreCase = true)
-}
+private fun String.wordCount(): Int = split(Regex("\\s+")).count { it.isNotBlank() }

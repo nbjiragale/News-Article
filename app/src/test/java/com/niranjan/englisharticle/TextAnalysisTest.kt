@@ -26,32 +26,43 @@ class TextAnalysisTest {
     }
 
     @Test
-    fun toMeaningTokenGroups_groupsLikelyThreeWordPhrase() {
-        val groups = "Global equity markets surged on Thursday."
-            .toWordTokens()
-            .toMeaningTokenGroups()
-
-        assertTrue(groups.first().isPhrase)
-        assertEquals("Global equity markets", groups.first().cleanText())
-    }
-
-    @Test
-    fun toMeaningTokenGroups_groupsKnownPhrasesAndCollocations() {
-        val groupTexts = "Markets rallied, driven by positive economic data."
+    fun toMeaningTokenGroups_doesNotMarkNamesOrPlainWordPairsAsPhrases() {
+        val groupTexts = "Wall Street rallied as the Prime Minister praised strong growth in global markets."
             .toWordTokens()
             .toMeaningTokenGroups()
             .filter { it.isPhrase }
             .map { it.cleanText() }
 
-        assertTrue("driven by" in groupTexts)
-        assertTrue("positive economic data" in groupTexts)
+        assertTrue("Expected no phrases, got $groupTexts", groupTexts.isEmpty())
+    }
+
+    @Test
+    fun toMeaningTokenGroups_groupsBuiltInFixedExpressions() {
+        val groupTexts = "Prices rose because of the drought, according to officials."
+            .toWordTokens()
+            .toMeaningTokenGroups()
+            .filter { it.isPhrase }
+            .map { it.cleanText() }
+
+        assertEquals(listOf("because of", "according to"), groupTexts)
+    }
+
+    @Test
+    fun toMeaningTokenGroups_matchesAiPhraseDespiteCurlyApostropheAndCase() {
+        val groupTexts = "Officials said it\u2019s water under the bridge now."
+            .toWordTokens()
+            .toMeaningTokenGroups(priorityPhrases = listOf("It's water under the bridge"))
+            .filter { it.isPhrase }
+            .map { it.cleanText() }
+
+        assertEquals(listOf("it\u2019s water under the bridge"), groupTexts)
     }
 
     @Test
     fun toMeaningTokenGroups_doesNotGroupAcrossSentenceBoundary() {
         val groupTexts = "The market saw a minor correction. Analysts point to rates."
             .toWordTokens()
-            .toMeaningTokenGroups()
+            .toMeaningTokenGroups(priorityPhrases = listOf("minor correction analysts"))
             .filter { it.isPhrase }
             .map { it.cleanText() }
 

@@ -1,0 +1,13 @@
+name = "arthareader-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+# Model used for every AI request. The app cannot choose it, so a copied app token
+# cannot be used to run a more expensive model on your account.
+OPENROUTER_MODEL = "google/gemini-2.5-flash"
+
+# Secrets are NOT set here. Set them with:
+#   npx wrangler secret put OPENROUTER_API_KEY
+#   npx wrangler secret put DEEPGRAM_API_KEY
+#   npx wrangler secret put APP_TOKEN

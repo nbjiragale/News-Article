@@ -34,20 +34,28 @@ You can:
 
 1. Clone the repo.
 2. Open the project in Android Studio.
-3. Add/update `local.properties` in project root:
+3. Deploy the API server once (see [`server/README.md`](server/README.md)). It holds the
+   OpenRouter and Deepgram keys; **the app never contains them**.
+4. Add/update `local.properties` in project root:
 
 ```properties
-openrouter.api.key=YOUR_OPENROUTER_KEY
-openrouter.model=google/gemini-2.5-flash
+api.base.url=https://arthareader-api.YOUR-SUBDOMAIN.workers.dev
+api.app.token=THE_SAME_VALUE_AS_THE_SERVER_APP_TOKEN
 
-deepgram.api.key=YOUR_DEEPGRAM_KEY
+deepgram.enabled=true
 deepgram.voice=aura-asteria-en
 deepgram.audio.offset.ms=0
+deepgram.word.timings=false
 ```
 
 Notes:
-- `openrouter.api.key` is required for AI-powered article cleanup/meaning/summary flows.
-- `deepgram.api.key` is optional. If missing, app falls back to Android system TTS.
+- `api.base.url` is required for article cleanup, summaries, meanings and idioms.
+- `api.app.token` must match the server's `APP_TOKEN` secret.
+- `deepgram.enabled=false` always uses the phone's own voice for read-aloud.
+- `deepgram.word.timings=true` pays for a second Deepgram call per audio chunk to get exact
+  read-along highlight timings; off by default.
+- Do **not** put OpenRouter or Deepgram keys in `local.properties` any more: anything in
+  `BuildConfig` ships inside the APK.
 
 ---
 

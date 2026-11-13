@@ -11,21 +11,26 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.niranjan.englisharticle.BuildConfig
+import com.niranjan.englisharticle.data.ApiProxy
 
 enum class ArticlePlaybackState { Idle, Playing, Paused }
 
 class ArticleSpeaker(
     context: Context,
-    deepgramApiKey: String = BuildConfig.DEEPGRAM_API_KEY,
+    apiProxy: ApiProxy = ApiProxy.fromBuildConfig(context),
+    deepgramEnabled: Boolean = BuildConfig.DEEPGRAM_ENABLED,
     deepgramVoice: String = BuildConfig.DEEPGRAM_VOICE,
-    deepgramAudioOffsetMs: Int = BuildConfig.DEEPGRAM_AUDIO_OFFSET_MS
+    deepgramAudioOffsetMs: Int = BuildConfig.DEEPGRAM_AUDIO_OFFSET_MS,
+    deepgramWordTimings: Boolean = BuildConfig.DEEPGRAM_WORD_TIMINGS
 ) {
     private val systemTts = ArticleTextToSpeech(context)
     private val deepgram = DeepgramTextToSpeech(
         context = context,
-        apiKey = deepgramApiKey,
+        proxy = apiProxy,
+        enabled = deepgramEnabled,
         voice = deepgramVoice,
-        audioOffsetMs = deepgramAudioOffsetMs
+        audioOffsetMs = deepgramAudioOffsetMs,
+        useSttWordTimings = deepgramWordTimings
     )
 
     /** Which engine is reading the article right now, so pause/resume reach the right one. */

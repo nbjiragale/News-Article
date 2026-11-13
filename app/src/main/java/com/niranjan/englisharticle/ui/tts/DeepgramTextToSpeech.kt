@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaPlayer
 import android.util.Log
 import com.niranjan.englisharticle.BuildConfig
+import com.niranjan.englisharticle.data.ApiProxy
 import com.niranjan.englisharticle.data.RetryableHttpException
 import com.niranjan.englisharticle.data.isSafeToRetryBilledRequest
 import com.niranjan.englisharticle.data.retryWithBackoff
@@ -32,9 +33,18 @@ import java.security.MessageDigest
 
 class DeepgramTextToSpeech(
     context: Context,
-    private val apiKey: String,
+    /** The app's own server, which holds the Deepgram key. */
+    private val proxy: ApiProxy,
+    /** False to skip Deepgram and always use the phone's voice. */
+    private val enabled: Boolean = true,
     private val voice: String,
-    private val audioOffsetMs: Int = 0
+    private val audioOffsetMs: Int = 0,
+    /**
+     * When true, each chunk's audio is sent back to Deepgram speech-to-text to get exact word
+     * start times for the highlight. That is a second paid request per chunk, so it is off by
+     * default and the highlight uses [ChunkPlan.estimatedWordStartsForDuration] instead.
+     */
+    private val useSttWordTimings: Boolean = false
 ) {
     private val appContext = context.applicationContext
     private val cacheDir: File = File(appContext.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
@@ -61,7 +71,7 @@ class DeepgramTextToSpeech(
     }
 
     val isConfigured: Boolean
-        get() = apiKey.isNotBlank()
+        get() = enabled && proxy.isConfigured
 
     val isPaused: Boolean
         get() = paused && player != null
@@ -202,6 +212,8 @@ class DeepgramTextToSpeech(
             )
             return@withContext SynthesizedChunk(mp3File, cachedStarts)
         }
+        // Exact timings need a second paid request; without it the player estimates them.
+        if (!useSttWordTimings) return@withContext SynthesizedChunk(mp3File, null)
 
         // Cache miss — try Deepgram STT for accurate per-word timing.
         logDebug(
@@ -256,7 +268,7 @@ class DeepgramTextToSpeech(
             doOutput = true
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Authorization", "Token $apiKey")
+            proxy.applyHeaders(this)
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "audio/mpeg")
         }
@@ -299,7 +311,7 @@ class DeepgramTextToSpeech(
             doOutput = true
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Authorization", "Token $apiKey")
+            proxy.applyHeaders(this)
             setRequestProperty("Content-Type", "audio/mpeg")
             setFixedLengthStreamingMode(mp3File.length())
         }
@@ -455,11 +467,10 @@ class DeepgramTextToSpeech(
         if (BuildConfig.DEBUG) Log.i(TAG, message)
     }
 
-    private fun deepgramSpeakUrl(): String =
-        "https://api.deepgram.com/v1/speak?model=$voice&encoding=mp3"
+    // The app's server adds the Deepgram key; see ApiProxy.
+    private fun deepgramSpeakUrl(): String = proxy.url("/v1/speak?voice=$voice")
 
-    private fun deepgramListenUrl(): String =
-        "https://api.deepgram.com/v1/listen?model=$STT_MODEL&punctuate=true&smart_format=false&filler_words=false"
+    private fun deepgramListenUrl(): String = proxy.url("/v1/listen")
 
     private class DeepgramException(message: String) : RuntimeException(message)
 
@@ -470,7 +481,6 @@ class DeepgramTextToSpeech(
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 60_000
         private const val WORD_TICK_MS = 40L
-        private const val STT_MODEL = "nova-3"
         private const val MAX_CONCURRENT_SYNTHESIS = 3
         private const val MAX_CACHE_BYTES = 200L * 1024 * 1024
 
@@ -498,22 +508,63 @@ internal data class ChunkPlan(
     /** Source words from the chunk text, in order. */
     val sourceWords: List<String>
 ) {
-    /** Character length of each word (in order); used by [estimatedWordStartsForDuration]. */
+    /** Character length of each word (in order). */
     val wordCharLengths: IntArray = IntArray(sourceWords.size) { sourceWords[it].length }
 
-    /** Fallback: distribute [durationMs] proportionally across words by character length. */
+    /**
+     * Relative speaking time of each word, including the pause after it. Used by
+     * [estimatedWordStartsForDuration].
+     */
+    val wordWeights: DoubleArray = DoubleArray(sourceWords.size) { sourceWords[it].spokenWeight() }
+
+    /**
+     * Estimated start time of each word: [durationMs] shared out by [wordWeights].
+     *
+     * This is the default timing source (exact speech-to-text timings cost a second paid
+     * request). Sharing by plain character count drifted: the voice pauses at commas and
+     * full stops, and reads "1,200" or "15.86" as several words, so the highlight ran ahead
+     * of the voice after every sentence end and lagged on numbers.
+     */
     fun estimatedWordStartsForDuration(durationMs: Int): IntArray {
         if (sourceWords.isEmpty()) return IntArray(0)
-        val totalChars = wordCharLengths.sum().coerceAtLeast(1)
+        val total = wordWeights.sum().takeIf { it > 0.0 } ?: 1.0
         val starts = IntArray(sourceWords.size)
-        var accumulated = 0
+        var accumulated = 0.0
         for (i in sourceWords.indices) {
-            starts[i] = (accumulated.toLong() * durationMs / totalChars).toInt()
-            accumulated += wordCharLengths[i]
+            starts[i] = (accumulated * durationMs / total).toInt()
+            accumulated += wordWeights[i]
         }
         return starts
     }
 }
+
+/**
+ * How long a word takes to say, in "letter" units, plus the pause after it. Letters count 1;
+ * a digit about 2.5 (numbers are read as several words); a currency or percent sign 6
+ * ("rupees", "percent"). A comma-like mark adds a short pause, a sentence end a longer one.
+ */
+internal fun String.spokenWeight(): Double {
+    var weight = 0.0
+    for (char in this) {
+        weight += when {
+            char.isLetter() -> 1.0
+            char.isDigit() -> 2.5
+            char in "%\u20B9$\u20AC\u00A3" -> 6.0
+            else -> 0.0
+        }
+    }
+    weight = weight.coerceAtLeast(1.0)
+    val end = trimEnd('"', '\'', ')', ']', '\u201D', '\u2019').lastOrNull()
+    weight += when (end) {
+        '.', '!', '?' -> SENTENCE_PAUSE_WEIGHT
+        ',', ';', ':', '\u2014', '\u2013' -> CLAUSE_PAUSE_WEIGHT
+        else -> 0.0
+    }
+    return weight
+}
+
+private const val CLAUSE_PAUSE_WEIGHT = 3.0
+private const val SENTENCE_PAUSE_WEIGHT = 6.0
 
 internal data class WordTimings(val startMs: IntArray) {
     /**

@@ -79,6 +79,37 @@ class DeepgramChunkTest {
     }
 
     @Test
+    fun `estimated timings leave a pause after a sentence end`() {
+        // Same letters either way; only the full stop differs.
+        val withStop = buildChunkPlans(listOf("aaaa bbbb. cccc dddd"))[0].estimatedWordStartsForDuration(10_000)
+        val noStop = buildChunkPlans(listOf("aaaa bbbb cccc dddd"))[0].estimatedWordStartsForDuration(10_000)
+
+        // The word after the full stop starts later, because the voice pauses there.
+        assertTrue("${withStop.toList()} vs ${noStop.toList()}", withStop[2] > noStop[2])
+    }
+
+    @Test
+    fun `estimated timings give numbers more time than their character count`() {
+        val starts = buildChunkPlans(listOf("about 1,200 voters"))[0].estimatedWordStartsForDuration(10_000)
+        val numberTime = starts[2] - starts[1]
+        val aboutTime = starts[1] - starts[0]
+
+        // "1,200" (4 digits) is read "one thousand two hundred": longer than "about" (5 letters).
+        assertTrue("${starts.toList()}", numberTime > aboutTime)
+    }
+
+    @Test
+    fun `estimated timings stay within the audio and keep word order`() {
+        val text = "During the SIR, Bengaluru's electorate dropped from 1.03 crore to 59.09 lakh. " +
+            "The net additions were only 2.10 lakh."
+        val starts = buildChunkPlans(listOf(text))[0].estimatedWordStartsForDuration(12_000)
+
+        assertEquals(0, starts.first())
+        assertTrue(starts.last() < 12_000)
+        for (i in 1 until starts.size) assertTrue(starts[i] > starts[i - 1])
+    }
+
+    @Test
     fun `indexForPosition picks the latest word started by the given timestamp`() {
         val plans = buildChunkPlans(listOf("aa bb cc"))
         val starts = plans[0].estimatedWordStartsForDuration(durationMs = 1500)

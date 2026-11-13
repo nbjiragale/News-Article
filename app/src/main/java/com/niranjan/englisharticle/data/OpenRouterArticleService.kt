@@ -29,8 +29,8 @@ import java.net.SocketTimeoutException
 import java.net.URL
 
 class OpenRouterArticleService(
-    /** The app's own server, which holds the OpenRouter key and chooses the model. */
-    private val proxy: ApiProxy
+    /** Direct (your own key) or through the app's server; see [ApiAccess]. */
+    private val access: ApiAccess
 ) : ArticleAiService {
     override suspend fun cleanArticle(rawText: String): CleanArticleResult {
         val content = sendJsonChatRequest(
@@ -404,12 +404,13 @@ class OpenRouterArticleService(
         systemMessage: String,
         userMessage: String
     ): String {
-        if (!proxy.isConfigured) {
-            error("The app's server address is missing.")
+        if (!access.isAiConfigured) {
+            error("The AI service is not set up. Add openrouter.api.key to local.properties.")
         }
 
-        // No model and no key: the server adds both, so neither can be changed or extracted.
+        // In server mode the model is null: the server chooses it.
         val payload = JSONObject()
+            .apply { access.chatModel?.let { put("model", it) } }
             .put(
                 "messages",
                 JSONArray()
@@ -444,14 +445,14 @@ class OpenRouterArticleService(
     }
 
     private fun executeChatRequest(payload: String): String {
-        val connection = (URL(proxy.url("/v1/chat")).openConnection() as HttpURLConnection)
+        val connection = (URL(access.chatUrl).openConnection() as HttpURLConnection)
             .apply {
                 requestMethod = "POST"
                 connectTimeout = 20_000
                 readTimeout = 45_000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                proxy.applyHeaders(this)
+                access.applyAiHeaders(this)
             }
 
         try {
@@ -499,7 +500,7 @@ class OpenRouterArticleService(
         error is IOException ->
             "Couldn't reach the article service. Please check your internet connection."
         error is OpenRouterHttpException && (error.code == 401 || error.code == 403) ->
-            "The app's server did not accept this app. Please update the app."
+            access.rejectedMessage
         error is OpenRouterHttpException && error.code == 413 ->
             "That text is too long for the article service."
         error is OpenRouterHttpException ->

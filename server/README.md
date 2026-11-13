@@ -4,6 +4,10 @@ A small [Cloudflare Worker](https://developers.cloudflare.com/workers/) that hol
 OpenRouter and Deepgram keys. The Android app calls this server instead of calling
 OpenRouter and Deepgram directly, so the keys are never inside the APK.
 
+**Optional.** A personal build that stays on your own phone can skip this server and put
+the keys in `local.properties` (see the main README). Deploy the server before giving the
+app to anyone else.
+
 ## What it allows
 
 | Route | Forwards to | Limits |
@@ -43,11 +47,10 @@ api.app.token=<the APP_TOKEN value>
 Change the model in `wrangler.toml` (`OPENROUTER_MODEL`) and run `npx wrangler deploy`
 again. No app update is needed.
 
-## Important: rotate the old keys
+## Important: use new keys
 
-Every APK built before this change contains the OpenRouter and Deepgram keys in plain
-text. **Revoke those keys** in the OpenRouter and Deepgram dashboards and create new ones
-for this server.
+Any APK built with keys in `local.properties` contains them in plain text. If such an APK
+was ever shared, **revoke those keys** and create new ones for this server.
 
 ## What this protects, and what it does not
 

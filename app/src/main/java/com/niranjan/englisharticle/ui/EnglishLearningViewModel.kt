@@ -469,7 +469,9 @@ class EnglishLearningViewModel(
             // SelectedWord, that error showed until the new answer arrived.
             val nextMeaningState = try {
                 val meaning = articleService.fetchMeaning(
-                    articleText = currentArticle.contextForMeaning(),
+                    articleText = currentArticle.contextForMeaning(
+                        nearbyText = tapped.context.ifBlank { tapped.sentence }
+                    ),
                     sentence = tapped.sentence,
                     word = tapped.word,
                     lookupMode = tapped.lookupMode

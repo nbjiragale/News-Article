@@ -340,7 +340,7 @@ class OpenRouterArticleService(
                 - simpleEnglish, partOfSpeech, word, and exampleEnglish must stay in English.
             """.trimIndent(),
             userMessage = """
-                ${correction?.let { "$it\n\n" } ?: ""}Article context:
+                ${correction?.let { "$it\n\n" } ?: ""}Context from the article (title, summary and the text around the tapped sentence):
                 $articleText
 
                 Tapped sentence:

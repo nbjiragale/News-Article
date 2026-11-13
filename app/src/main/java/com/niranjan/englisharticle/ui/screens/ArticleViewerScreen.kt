@@ -61,6 +61,7 @@ import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.domain.CleanArticleResult
 import com.niranjan.englisharticle.domain.WordToken
 import com.niranjan.englisharticle.domain.WordTokenGroup
+import com.niranjan.englisharticle.domain.contextAround
 import com.niranjan.englisharticle.domain.ensureParagraphs
 import com.niranjan.englisharticle.domain.findSentenceContaining
 import com.niranjan.englisharticle.domain.toMeaningTokenGroups
@@ -513,6 +514,7 @@ private fun InteractiveParagraph(
             SelectedWord(
                 word = range.lookupText,
                 sentence = articleBody.findSentenceContaining(range.sourceStartIndex),
+                context = articleBody.contextAround(range.sourceStartIndex),
                 showSentence = showSentence
             )
         )

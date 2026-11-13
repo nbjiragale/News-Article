@@ -50,6 +50,10 @@ private fun String.hasKannadaScript(): Boolean {
 
 private fun String.hasNonKannadaIndicScript(): Boolean {
     return any {
+        // The danda (।, U+0964) and double danda (॥, U+0965) sit in the Devanagari block but
+        // are shared punctuation that Kannada text uses too. Counting them as "Hindi" rejected
+        // good answers and paid for a second request.
+        if (it == '\u0964' || it == '\u0965') return@any false
         it in '\u0C00'..'\u0C7F' ||
             it in '\u0B80'..'\u0BFF' ||
             it in '\u0D00'..'\u0D7F' ||

@@ -3,6 +3,9 @@ package com.niranjan.englisharticle.data
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.UnknownHostException
 
 /**
  * Marks an HTTP response that is worth retrying (rate limiting or a transient
@@ -13,6 +16,20 @@ class RetryableHttpException(val code: Int, message: String) : IOException(messa
 
 /** True for transient failures (network drops, 429s, 5xx) that a retry might recover from. */
 fun Throwable.isTransientNetworkError(): Boolean = this is IOException
+
+/**
+ * Retry predicate for requests that are billed (AI and text-to-speech calls).
+ *
+ * Retries only failures where the request clearly never reached the service, or the service
+ * said "try again" (429/5xx). A read timeout is *not* retried: the request was sent and the
+ * service may still finish and bill it, so a retry pays for the same work again, and three
+ * 45-second timeouts kept the user waiting over two minutes.
+ */
+fun Throwable.isSafeToRetryBilledRequest(): Boolean = when (this) {
+    is RetryableHttpException -> true
+    is ConnectException, is UnknownHostException, is NoRouteToHostException -> true
+    else -> false
+}
 
 /**
  * Runs [block], retrying on transient failures with exponential backoff.

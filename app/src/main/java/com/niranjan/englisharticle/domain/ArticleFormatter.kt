@@ -197,7 +197,7 @@ object ArticleFormatter {
                 if (line.isBlank()) return@filter true
                 val lower = line.lowercase()
                 if (lower in unwantedShortLines) return@filter false
-                if (unwantedLinePhrases.any { phrase -> lower == phrase || lower.contains(phrase) }) return@filter false
+                if (lower.isBoilerplateLine()) return@filter false
                 if (line.containsUrl() && line.split(Regex("\\s+")).size <= 3) return@filter false
                 if (line.isMetadataOnly()) return@filter false
                 if (line.isMostlySymbols()) return@filter false
@@ -233,7 +233,7 @@ object ArticleFormatter {
         if (isBlank()) return false
 
         val lowerLine = lowercase()
-        if (unwantedLinePhrases.any { lowerLine == it || lowerLine.contains(it) }) return false
+        if (lowerLine.isBoilerplateLine()) return false
         if (lowerLine in unwantedShortLines) return false
         if (length <= 2) return false
         if (matches(Regex("^[|.\\-_=*]+$"))) return false
@@ -246,6 +246,47 @@ object ArticleFormatter {
 
         return true
     }
+
+    /**
+     * True when a (lowercased) line is page clutter rather than article text.
+     *
+     * The phrase list holds ordinary English words ("comments", "related", "premium",
+     * "promoted", "Facebook"...). Matching them anywhere in a line deleted whole real
+     * paragraphs, because the AI cleaner returns each paragraph as one line. So a loose
+     * phrase match only counts on a short line, which is what menus, buttons and
+     * banners look like. Long lines are dropped only for phrases that never appear in
+     * normal article prose.
+     */
+    private fun String.isBoilerplateLine(): Boolean {
+        if (unwantedLinePhrases.any { this == it }) return true
+        if (strongBoilerplatePhrases.any { contains(it) }) return true
+
+        val wordCount = split(Regex("\\s+")).count { it.isNotBlank() }
+        if (wordCount > MAX_SHORT_CLUTTER_WORDS) return false
+        // A short but complete sentence ("His comments drew sharp criticism.") is prose.
+        val looksLikeSentence = wordCount >= MIN_SENTENCE_WORDS &&
+            trimEnd('"', '\'', ')', '”', '’').lastOrNull() in setOf('.', '!', '?')
+        if (looksLikeSentence) return false
+        return unwantedLinePhrases.any { contains(it) }
+    }
+
+    private const val MAX_SHORT_CLUTTER_WORDS = 8
+    private const val MIN_SENTENCE_WORDS = 5
+
+    /** Phrases that mark a line as clutter at any length; none occur in real reporting. */
+    private val strongBoilerplatePhrases = listOf(
+        "story continues below advertisement",
+        "all rights reserved",
+        "subscribe to our",
+        "sign up for our",
+        "already a subscriber",
+        "click here to",
+        "skip to main content",
+        "skip to content",
+        "reproduction prohibited",
+        "download the app",
+        "get our newsletter"
+    )
 
     private fun List<String>.trimToMainArticle(): List<String> {
         if (isEmpty()) return this
@@ -318,7 +359,13 @@ object ArticleFormatter {
             }
 
             val lowerLine = line.lowercase()
-            val isFooter = bodySentenceCount >= 2 && (
+            // Footer headings ("More from Business", "Related stories") are short labels. A
+            // long line or a full sentence that merely mentions "related" or "recommended"
+            // is body text; treating it as the footer used to cut off the rest of the article.
+            val wordCount = line.split(Regex("\\s+")).count { it.isNotBlank() }
+            val looksLikeLabel = wordCount <= MAX_SHORT_CLUTTER_WORDS &&
+                !line.endsWithSentencePunctuation()
+            val isFooter = bodySentenceCount >= 2 && looksLikeLabel && (
                 lowerLine.contains("more from") ||
                     lowerLine.contains("related") ||
                     lowerLine.contains("recommended") ||

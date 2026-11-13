@@ -1,5 +1,6 @@
 package com.niranjan.englisharticle.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,7 @@ import com.niranjan.englisharticle.domain.MeaningLookupMode
 import com.niranjan.englisharticle.domain.MeaningResult
 import com.niranjan.englisharticle.domain.RecentArticle
 import com.niranjan.englisharticle.domain.SavedWord
+import com.niranjan.englisharticle.domain.articleWordCount
 import com.niranjan.englisharticle.ui.state.MeaningUiState
 import com.niranjan.englisharticle.ui.state.SelectedWord
 import kotlinx.coroutines.CancellationException
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -57,12 +60,22 @@ class EnglishLearningViewModel(
     private val _navigationEvents = MutableSharedFlow<EnglishNavigationEvent>()
     val navigationEvents = _navigationEvents.asSharedFlow()
 
+    // A database error must not reach viewModelScope: there it is an uncaught exception that
+    // kills the app. Show an empty list and log instead.
     val recentArticles: StateFlow<List<RecentArticle>> = localStore
         .observeRecentArticles()
+        .catch { error ->
+            Log.e(TAG, "Could not read recent articles", error)
+            emit(emptyList())
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val savedWords: StateFlow<List<SavedWord>> = localStore
         .observeSavedWords()
+        .catch { error ->
+            Log.e(TAG, "Could not read saved words", error)
+            emit(emptyList())
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var meaningLookupJob: Job? = null
@@ -89,23 +102,46 @@ class EnglishLearningViewModel(
     }
 
     fun clearCurrentArticle() {
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 cleanedArticle = null,
-                isCleaningArticle = false,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                summaryError = null
             )
         }
     }
 
     fun clearArticleText() {
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
-        youTubeImportJob?.cancel()
+        stopArticleWork()
         _uiState.value = EnglishLearningUiState()
+    }
+
+    /**
+     * Cancels every job that loads or enriches the current article (cleaning, YouTube import,
+     * summary, word lookup) and clears their busy flags in the same step.
+     *
+     * Each entry point used to cancel only some of these and leave the matching flag set. A
+     * cancelled job never reaches the line that clears its flag, so the spinner stayed on and
+     * the button stayed disabled until the app was restarted. A YouTube import that was not
+     * cancelled could also finish later and replace the article the user had just opened.
+     *
+     * Idiom extraction is deliberately left running: it only adds data to an article that is
+     * already saved, and [enrichShownArticle] ignores it if another article is on screen.
+     */
+    private fun stopArticleWork() {
+        articleCleaningJob?.cancel()
+        youTubeImportJob?.cancel()
+        summaryJob?.cancel()
+        meaningLookupJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isCleaningArticle = false,
+                isImportingYouTube = false,
+                isSummarizingArticle = false,
+                selected = null,
+                meaningState = MeaningUiState.Idle
+            )
+        }
     }
 
     fun updateDraftYouTubeUrl(url: String) {
@@ -126,18 +162,12 @@ class EnglishLearningViewModel(
         if (url.isBlank()) return
         if (uiState.value.isImportingYouTube) return
 
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
-        summaryJob?.cancel()
-        youTubeImportJob?.cancel()
-
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 isImportingYouTube = true,
                 youTubeError = null,
-                cleaningError = null,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                cleaningError = null
             )
         }
 
@@ -166,12 +196,10 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val resolved = CleanArticleResult(
+            val resolved = formatTranscriptOrRaw(
+                rawTranscript = transcript.transcript,
                 title = transcript.title,
-                subtitle = "",
-                author = transcript.author,
-                publishedDate = "",
-                cleanArticle = transcript.transcript
+                author = transcript.author
             )
 
             _uiState.update {
@@ -179,36 +207,81 @@ class EnglishLearningViewModel(
                     cleanedArticle = resolved,
                     isImportingYouTube = false,
                     youTubeError = null,
+                    summaryError = null,
                     draftYouTubeUrl = "",
                     rawArticleForRetry = transcript.transcript
                 )
             }
             _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
+            saveAndExtractPhrases(resolved)
+        }
+    }
 
+    /**
+     * Turns a raw caption track into readable text. Auto-generated captions have no
+     * punctuation and no paragraphs, so the reader showed one giant block, sentence lookups
+     * sent the whole video as one "sentence", and read-aloud broke words in half.
+     *
+     * The AI formatter adds punctuation and paragraphs. It is only used for transcripts up to
+     * [MAX_AI_TRANSCRIPT_CHARS], because it must echo the whole text back within the request
+     * timeout. Longer transcripts, failures, and answers that dropped too much text fall back
+     * to the raw text, which the reader splits into short paragraphs locally.
+     */
+    private suspend fun formatTranscriptOrRaw(
+        rawTranscript: String,
+        title: String,
+        author: String
+    ): CleanArticleResult {
+        val raw = CleanArticleResult(
+            title = title,
+            subtitle = "",
+            author = author,
+            publishedDate = "",
+            cleanArticle = rawTranscript
+        )
+        if (rawTranscript.length > MAX_AI_TRANSCRIPT_CHARS) return raw
+
+        val formatted = try {
+            articleService.formatTranscript(rawTranscript, title, author)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            return raw
+        }
+        val keptEnoughText = formatted.cleanArticle.articleWordCount() >=
+            rawTranscript.articleWordCount() * MIN_TRANSCRIPT_KEPT_RATIO
+        if (formatted.cleanArticle.isBlank() || !keptEnoughText) return raw
+
+        return formatted.copy(
+            title = formatted.title.ifBlank { title },
+            author = formatted.author.ifBlank { author }
+        )
+    }
+
+    /**
+     * Saves a newly loaded article to history right away, then adds idiomatic phrases in a
+     * separate job.
+     *
+     * The save used to happen only after phrase extraction, inside the loading job. Going back
+     * from the reader cancels that job, so an article the user left quickly was never saved.
+     */
+    private suspend fun saveAndExtractPhrases(article: CleanArticleResult) {
+        runDatabaseWrite("save recent article") { localStore.saveRecentArticle(article) }
+
+        viewModelScope.launch {
             val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(resolved.cleanArticle)
+                articleService.extractIdiomaticPhrases(article.cleanArticle)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Throwable) {
                 emptyList()
             }
-            val articleToSave = if (detectedPhrases.isEmpty()) {
-                resolved
-            } else {
-                resolved.copy(idiomaticPhrases = detectedPhrases)
-            }
+            if (detectedPhrases.isEmpty()) return@launch
 
-            if (detectedPhrases.isNotEmpty()) {
-                _uiState.update { current ->
-                    if (current.cleanedArticle?.cleanArticle == resolved.cleanArticle) {
-                        current.copy(cleanedArticle = articleToSave)
-                    } else {
-                        current
-                    }
-                }
+            val articleToSave = enrichShownArticle(article) { shown ->
+                shown.copy(idiomaticPhrases = detectedPhrases)
             }
-
-            runCatching { localStore.saveRecentArticle(articleToSave) }
+            runDatabaseWrite("save recent article") { localStore.saveRecentArticle(articleToSave) }
         }
     }
 
@@ -216,25 +289,18 @@ class EnglishLearningViewModel(
         val sharedArticle = article.trim()
         if (sharedArticle.isBlank()) return
 
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
+        stopArticleWork()
         _uiState.value = EnglishLearningUiState(
             draftArticle = sharedArticle
         )
     }
 
     fun openRecentArticle(article: RecentArticle) {
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
-        summaryJob?.cancel()
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 cleanedArticle = article.toCleanArticleResult(),
-                isCleaningArticle = false,
-                isSummarizingArticle = false,
-                summaryError = null,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                summaryError = null
             )
         }
     }
@@ -278,23 +344,10 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val updated = current.copy(summary = summary)
-            _uiState.update { state ->
-                if (state.cleanedArticle?.cleanArticle == current.cleanArticle) {
-                    state.copy(
-                        cleanedArticle = updated,
-                        isSummarizingArticle = false,
-                        summaryError = null
-                    )
-                } else {
-                    state.copy(
-                        isSummarizingArticle = false,
-                        summaryError = null
-                    )
-                }
-            }
+            _uiState.update { it.copy(isSummarizingArticle = false, summaryError = null) }
+            val updated = enrichShownArticle(current) { article -> article.copy(summary = summary) }
 
-            runCatching { localStore.saveRecentArticle(updated) }
+            runDatabaseWrite("save recent article") { localStore.saveRecentArticle(updated) }
         }
     }
 
@@ -314,11 +367,19 @@ class EnglishLearningViewModel(
         }
 
         meaningLookupJob = viewModelScope.launch {
-            val cachedMeaning = localStore.getMeaning(
-                word = tapped.word,
-                sentence = tapped.sentence,
-                lookupMode = tapped.lookupMode
-            )
+            // A cache read failure just means "not cached"; fetch it instead of crashing.
+            val cachedMeaning = try {
+                localStore.getMeaning(
+                    word = tapped.word,
+                    sentence = tapped.sentence,
+                    lookupMode = tapped.lookupMode
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(TAG, "Meaning cache read failed", error)
+                null
+            }
             val cachedMeaningIsValid = cachedMeaning != null &&
                 cachedMeaning.hasValidKannadaFields() &&
                 (
@@ -334,33 +395,43 @@ class EnglishLearningViewModel(
                 return@launch
             }
 
-            val nextMeaningState = runCatching {
-                articleService.fetchMeaning(
+            // Not runCatching: it also catches the CancellationException of a lookup that was
+            // replaced (for example the same word tapped twice). The cancelled lookup then
+            // wrote "Job was cancelled" as an error, and because the new tap is an equal
+            // SelectedWord, that error showed until the new answer arrived.
+            val nextMeaningState = try {
+                val meaning = articleService.fetchMeaning(
                     articleText = currentArticle.contextForMeaning(),
                     sentence = tapped.sentence,
                     word = tapped.word,
                     lookupMode = tapped.lookupMode
                 )
-            }.fold(
-                onSuccess = { meaning ->
-                    runCatching {
-                        localStore.saveMeaning(
-                            word = tapped.word,
-                            sentence = tapped.sentence,
-                            lookupMode = tapped.lookupMode,
-                            meaning = meaning
-                        )
-                    }
-                    MeaningUiState.Success(meaning)
-                },
-                onFailure = { MeaningUiState.Error(it.message ?: "Could not load meaning.") }
-            )
+                runDatabaseWrite("save meaning to cache") {
+                    localStore.saveMeaning(
+                        word = tapped.word,
+                        sentence = tapped.sentence,
+                        lookupMode = tapped.lookupMode,
+                        meaning = meaning
+                    )
+                }
+                MeaningUiState.Success(meaning)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                MeaningUiState.Error(error.message ?: "Could not load meaning.")
+            }
 
             _uiState.updateMeaningIfStillSelected(
                 selected = tapped,
                 meaningState = nextMeaningState
             )
         }
+    }
+
+    /** Tries the current word lookup again after an error. */
+    fun retryMeaning() {
+        val current = uiState.value.selected ?: return
+        selectWord(current)
     }
 
     fun dismissMeaning() {
@@ -383,7 +454,7 @@ class EnglishLearningViewModel(
         val currentState = uiState.value
         val tapped = currentState.selected ?: return
 
-        viewModelScope.launch {
+        launchDatabaseWrite("save word") {
             localStore.saveWord(
                 word = tapped.word,
                 sentence = tapped.sentence,
@@ -395,27 +466,68 @@ class EnglishLearningViewModel(
     }
 
     fun deleteRecentArticle(id: Long) {
-        viewModelScope.launch {
-            localStore.deleteRecentArticle(id)
-        }
+        launchDatabaseWrite("delete recent article") { localStore.deleteRecentArticle(id) }
     }
 
     fun clearRecentArticles() {
-        viewModelScope.launch {
-            localStore.clearRecentArticles()
-        }
+        launchDatabaseWrite("clear recent articles") { localStore.clearRecentArticles() }
     }
 
     fun deleteSavedWord(savedKey: String) {
-        viewModelScope.launch {
-            localStore.deleteSavedWord(savedKey)
-        }
+        launchDatabaseWrite("delete saved word") { localStore.deleteSavedWord(savedKey) }
     }
 
     fun recordPracticeResult(savedKey: String, isCorrect: Boolean) {
-        viewModelScope.launch {
+        launchDatabaseWrite("record practice result") {
             localStore.recordPracticeResult(savedKey, isCorrect)
         }
+    }
+
+    /**
+     * Runs a database write in [viewModelScope]. These used to run bare, so any database error
+     * (disk full, a corrupt file) was an uncaught exception in [viewModelScope], which kills
+     * the app. A failed write is now logged; the UI keeps showing what the database holds.
+     */
+    private fun launchDatabaseWrite(action: String, write: suspend () -> Unit) {
+        viewModelScope.launch { runDatabaseWrite(action, write) }
+    }
+
+    private suspend fun runDatabaseWrite(action: String, write: suspend () -> Unit) {
+        try {
+            write()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.e(TAG, "Could not $action", error)
+        }
+    }
+
+    /**
+     * Applies [enrich] (add a summary, add idioms) to the article on screen and returns the
+     * enriched copy to persist.
+     *
+     * The summary and the idiom extraction run as separate background jobs. Each one used to
+     * copy the article it started from and write that copy back, so whichever finished last
+     * threw away the other's result, on screen and in history. Enriching the *current* shown
+     * article instead keeps both. If the user has moved to another article, [base] is enriched
+     * and only persisted; the store merges it with what is already saved.
+     */
+    private fun enrichShownArticle(
+        base: CleanArticleResult,
+        enrich: (CleanArticleResult) -> CleanArticleResult
+    ): CleanArticleResult {
+        var result = enrich(base)
+        _uiState.update { state ->
+            val shown = state.cleanedArticle
+            if (shown != null && shown.isSameArticleAs(base)) {
+                result = enrich(shown)
+                state.copy(cleanedArticle = result)
+            } else {
+                result = enrich(base)
+                state
+            }
+        }
+        return result
     }
 
     private fun cleanRawArticle(rawText: String) {
@@ -426,15 +538,13 @@ class EnglishLearningViewModel(
             return
         }
 
-        articleCleaningJob?.cancel()
-        meaningLookupJob?.cancel()
+        stopArticleWork()
         _uiState.update {
             it.copy(
                 rawArticleForRetry = rawArticle,
                 isCleaningArticle = true,
                 cleaningError = null,
-                selected = null,
-                meaningState = MeaningUiState.Idle
+                youTubeError = null
             )
         }
 
@@ -469,35 +579,12 @@ class EnglishLearningViewModel(
             _uiState.update {
                 it.copy(
                     cleanedArticle = displayResult,
-                    isCleaningArticle = false
+                    isCleaningArticle = false,
+                    summaryError = null
                 )
             }
             _navigationEvents.emit(EnglishNavigationEvent.OpenReader)
-
-            val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(displayResult.cleanArticle)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                emptyList()
-            }
-            val articleToSave = if (detectedPhrases.isEmpty()) {
-                displayResult
-            } else {
-                displayResult.copy(idiomaticPhrases = detectedPhrases)
-            }
-
-            if (detectedPhrases.isNotEmpty()) {
-                _uiState.update { current ->
-                    if (current.cleanedArticle?.cleanArticle == displayResult.cleanArticle) {
-                        current.copy(cleanedArticle = articleToSave)
-                    } else {
-                        current
-                    }
-                }
-            }
-
-            runCatching { localStore.saveRecentArticle(articleToSave) }
+            saveAndExtractPhrases(displayResult)
         }
     }
 }
@@ -522,6 +609,18 @@ class EnglishLearningViewModel(
  * is tracked as H3 in docs/PRODUCTION_READINESS_REVIEW.md.
  */
 private const val MAX_ARTICLE_CHARS = 100_000
+
+private const val TAG = "EnglishLearningVM"
+
+/**
+ * Longest transcript sent to the AI formatter. The formatter echoes the whole text back, so a
+ * much longer one would not finish inside the request timeout. About 2,500 words, or a
+ * 15-minute video; longer videos use the raw captions.
+ */
+private const val MAX_AI_TRANSCRIPT_CHARS = 15_000
+
+/** The formatter may drop filler words; dropping more than this means it summarized. */
+private const val MIN_TRANSCRIPT_KEPT_RATIO = 0.8
 
 private fun tooLongMessage(actualLength: Int): String {
     val actualK = actualLength / 1_000
@@ -554,4 +653,8 @@ private fun MutableStateFlow<EnglishLearningUiState>.updateMeaningIfStillSelecte
             current
         }
     }
+}
+
+private fun CleanArticleResult.isSameArticleAs(other: CleanArticleResult): Boolean {
+    return title == other.title && cleanArticle == other.cleanArticle
 }

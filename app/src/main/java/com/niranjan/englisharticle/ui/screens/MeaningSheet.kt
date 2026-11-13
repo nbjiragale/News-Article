@@ -24,6 +24,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -56,6 +57,7 @@ fun MeaningSheet(
     onSaveWord: (MeaningResult) -> Unit,
     onPractice: (MeaningResult) -> Unit,
     onChangeMode: (Boolean) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -116,6 +118,14 @@ fun MeaningSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                } else {
+                    // Without this the only way to retry was to close the sheet and tap again.
+                    OutlinedButton(
+                        onClick = onRetry,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Try again", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
 

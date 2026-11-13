@@ -59,8 +59,12 @@ fun PracticeScreen(
     var sessionCorrect by remember { mutableIntStateOf(0) }
     var sessionAnswered by remember { mutableIntStateOf(0) }
     val savedKeys = remember(savedWords) { savedWords.joinToString("|") { it.savedKey } }
+    // Which saved-word list the deck was built from. Until the effect below builds the deck,
+    // it is empty, and the screen used to show "Session complete, 0%" for that first frame.
+    var deckKeys by remember { mutableStateOf<String?>(null) }
 
     fun restartPractice() {
+        deckKeys = savedKeys
         deck = savedWords.shuffled()
         currentIndex = 0
         selectedKey = null
@@ -92,6 +96,8 @@ fun PracticeScreen(
             )
             return@Column
         }
+
+        if (deckKeys != savedKeys) return@Column
 
         val current = deck.getOrNull(currentIndex)
         if (current == null) {

@@ -119,10 +119,12 @@ fun ArticleViewerScreen(
     val articleBody = readerContent.articleBody
     val paragraphs = readerContent.paragraphs
     val paragraphWordOffsets = readerContent.paragraphWordOffsets
-    val lookedUpWords = remember { mutableStateSetOf<String>() }
+    // Keyed on the article: the set used to outlive it, so words looked up in one article
+    // stayed coloured in the next one opened.
+    val lookedUpWords = remember(article.title, article.cleanArticle) { mutableStateSetOf<String>() }
     // Snapshot recomputed only when a new word is looked up (set never shrinks), so paragraph
     // rendering doesn't allocate a fresh Set on every recomposition during playback.
-    val lookedUpSnapshot = remember(lookedUpWords.size) { lookedUpWords.toSet() }
+    val lookedUpSnapshot = remember(lookedUpWords, lookedUpWords.size) { lookedUpWords.toSet() }
     val context = LocalContext.current
     val highlightPrefs = remember(context) {
         context.applicationContext.getSharedPreferences(

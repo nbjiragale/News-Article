@@ -33,17 +33,46 @@ fun String.ensureParagraphs(sentencesPerParagraph: Int = 3): String {
     if (normalized.contains("\n\n")) return normalized
 
     val singleLine = normalized.replace("\n", " ").replace(Regex("\\s+"), " ").trim()
-    val sentences = Regex("[^.!?]+[.!?]+[\")']*|[^.!?]+$")
-        .findAll(singleLine)
-        .map { it.value.trim() }
-        .filter { it.isNotEmpty() }
-        .toList()
+    val sentences = singleLine.splitIntoSentences()
 
-    if (sentences.size <= sentencesPerParagraph) return normalized
+    val hasRunOnSentence = sentences.any { it.wordCount() > MAX_SENTENCE_WORDS }
+    if (sentences.size <= sentencesPerParagraph && !hasRunOnSentence) return normalized
 
-    return sentences.chunked(sentencesPerParagraph)
-        .joinToString("\n\n") { it.joinToString(" ") }
+    val paragraphs = mutableListOf<String>()
+    val pending = mutableListOf<String>()
+    fun flush() {
+        if (pending.isNotEmpty()) {
+            paragraphs += pending.joinToString(" ")
+            pending.clear()
+        }
+    }
+
+    for (sentence in sentences) {
+        val words = sentence.split(' ').filter { it.isNotEmpty() }
+        if (words.size > MAX_SENTENCE_WORDS) {
+            // Unpunctuated text (auto-generated YouTube captions) arrives as one endless
+            // "sentence". Break it into short paragraphs so the reader is not one giant
+            // block, and so a sentence lookup (which stops at a line break) sends one short
+            // passage instead of the whole transcript.
+            flush()
+            words.chunked(RUN_ON_PARAGRAPH_WORDS).forEach { paragraphs += it.joinToString(" ") }
+        } else {
+            pending += sentence
+            if (pending.size == sentencesPerParagraph) flush()
+        }
+    }
+    flush()
+
+    return paragraphs.joinToString("\n\n")
 }
+
+/** Longer than any normal sentence; a "sentence" past this has lost its punctuation. */
+private const val MAX_SENTENCE_WORDS = 80
+
+/** Paragraph size used when splitting unpunctuated text. */
+private const val RUN_ON_PARAGRAPH_WORDS = 50
+
+private fun String.wordCount(): Int = split(' ').count { it.isNotEmpty() }
 
 fun String.toWordTokens(): List<WordToken> {
     var paragraphIndex = 0
@@ -94,13 +123,102 @@ fun String.findSentenceContaining(index: Int): String {
     if (isBlank()) return ""
 
     val safeIndex = index.coerceIn(indices)
-    val start = lastIndexOfAny(charArrayOf('.', '!', '?', '\n'), startIndex = safeIndex)
-        .let { if (it == -1) 0 else it + 1 }
-    val end = indexOfAny(charArrayOf('.', '!', '?', '\n'), startIndex = safeIndex)
-        .let { if (it == -1) length else it + 1 }
+
+    // Start: just after the last sentence end (or line break) before the tapped position.
+    var start = 0
+    var i = safeIndex - 1
+    while (i >= 0) {
+        val char = this[i]
+        if (char == '\n') {
+            start = i + 1
+            break
+        }
+        if (char in SENTENCE_PUNCTUATION && isSentenceEndAt(i)) {
+            start = endOfSentencePunctuation(i)
+            break
+        }
+        i--
+    }
+    if (start > safeIndex) start = 0
+
+    // End: the first sentence end (or line break) at or after the tapped position.
+    var end = length
+    var j = maxOf(safeIndex, start)
+    while (j < length) {
+        val char = this[j]
+        if (char == '\n') {
+            end = j
+            break
+        }
+        if (char in SENTENCE_PUNCTUATION && isSentenceEndAt(j)) {
+            end = endOfSentencePunctuation(j)
+            break
+        }
+        j++
+    }
 
     return substring(start, end).trim()
 }
+
+/**
+ * Splits running text into sentences. A '.' ends a sentence only when whitespace (or the end)
+ * follows and it does not close an abbreviation ("Mr.", "Dr.", "etc."), an initial or a dotted
+ * abbreviation ("J.", "U.S.", "e.g."). Decimals ("3.5%") and web addresses never split, since
+ * no whitespace follows their dot. The old split on every '.', '!' or '?' broke "Mr. Modi" and
+ * "the U.S. economy" into fragments, so sentence lookups sent half-sentences.
+ */
+internal fun String.splitIntoSentences(): List<String> {
+    val sentences = mutableListOf<String>()
+    var start = 0
+    var i = 0
+    while (i < length) {
+        if (this[i] in SENTENCE_PUNCTUATION && isSentenceEndAt(i)) {
+            val end = endOfSentencePunctuation(i)
+            substring(start, end).trim().takeIf { it.isNotEmpty() }?.let { sentences += it }
+            start = end
+            i = end
+        } else {
+            i++
+        }
+    }
+    substring(start).trim().takeIf { it.isNotEmpty() }?.let { sentences += it }
+    return sentences
+}
+
+/** True when the '.', '!' or '?' at [index] ends a sentence. */
+private fun String.isSentenceEndAt(index: Int): Boolean {
+    val after = endOfSentencePunctuation(index)
+    if (after < length && !this[after].isWhitespace()) return false
+    if (this[index] != '.') return true
+
+    var wordStart = index
+    while (wordStart > 0 && this[wordStart - 1].isLetter()) wordStart--
+    val word = substring(wordStart, index)
+    if (word.isEmpty()) return true
+    // Part of a dotted abbreviation such as "U.S." or "e.g.".
+    if (wordStart > 0 && this[wordStart - 1] == '.') return false
+    // An initial such as "J." in "J. K. Rowling", or the "U." of "U.S.".
+    if (word.length == 1 && word[0].isUpperCase()) return false
+    return word.lowercase() !in ABBREVIATIONS
+}
+
+/** Index just past the punctuation run at [index] and any closing quotes or brackets. */
+private fun String.endOfSentencePunctuation(index: Int): Int {
+    var end = index + 1
+    while (end < length && (this[end] in SENTENCE_PUNCTUATION || this[end] in SENTENCE_CLOSERS)) end++
+    return end
+}
+
+private const val SENTENCE_PUNCTUATION = ".!?"
+private const val SENTENCE_CLOSERS = "\"')]”’»"
+
+private val ABBREVIATIONS = setOf(
+    "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "mt", "ft",
+    "gen", "col", "lt", "sgt", "capt", "gov", "sen", "rep", "pres", "hon", "rev",
+    "inc", "ltd", "corp", "bros", "vs", "etc", "approx", "dept",
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+    "rs", "fig", "vol", "ch", "pp"
+)
 
 fun String.isLikelyHeading(paragraphIndex: Int): Boolean {
     val trimmed = trim()

@@ -82,6 +82,20 @@ class YouTubeTranscriptServiceTest {
     }
 
     @Test
+    fun extractVideoId_rejectsLookAlikeHosts() {
+        assertNull(YouTubeTranscriptService.extractVideoId("https://notyoutube.com/watch?v=dQw4w9WgXcQ"))
+        assertNull(YouTubeTranscriptService.extractVideoId("https://evil-youtube.com/shorts/abcDEF12345"))
+    }
+
+    @Test
+    fun extractVideoId_acceptsYouTubeSubdomains() {
+        assertEquals(
+            "dQw4w9WgXcQ",
+            YouTubeTranscriptService.extractVideoId("https://music.youtube.com/watch?v=dQw4w9WgXcQ")
+        )
+    }
+
+    @Test
     fun extractVideoId_returnsNullForBlank() {
         assertNull(YouTubeTranscriptService.extractVideoId("   "))
     }

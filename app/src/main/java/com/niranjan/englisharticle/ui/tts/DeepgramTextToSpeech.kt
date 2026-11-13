@@ -5,18 +5,20 @@ import android.media.MediaPlayer
 import android.util.Log
 import com.niranjan.englisharticle.BuildConfig
 import com.niranjan.englisharticle.data.RetryableHttpException
+import com.niranjan.englisharticle.data.isSafeToRetryBilledRequest
 import com.niranjan.englisharticle.data.retryWithBackoff
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -36,7 +38,13 @@ class DeepgramTextToSpeech(
 ) {
     private val appContext = context.applicationContext
     private val cacheDir: File = File(appContext.cacheDir, CACHE_DIR_NAME).apply { mkdirs() }
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // The handler is a last line of defence: an error escaping a playback job must be logged,
+    // never allowed to reach the thread's uncaught-exception handler and kill the app.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, error ->
+            Log.e(TAG, "Unexpected error in Deepgram playback", error)
+        }
+    )
 
     /** Bounds how many chunks hit Deepgram (speak + STT) at once, to avoid rate-limit bursts. */
     private val synthesisSemaphore = Semaphore(MAX_CONCURRENT_SYNTHESIS)
@@ -81,56 +89,90 @@ class DeepgramTextToSpeech(
 
     fun speak(
         text: String,
-        onUnavailable: (String) -> Unit,
+        /**
+         * Called when Deepgram cannot speak (not configured, or a chunk failed) with the text not
+         * yet spoken and the index, within [text], of its first word. The receiver takes over
+         * playback: [onComplete] is then not called for this request.
+         */
+        onUnavailable: (remainingText: String, firstWordIndex: Int) -> Unit,
         onWordIndex: (Int?) -> Unit = {},
         onComplete: () -> Unit = {}
     ) {
         val cleaned = text.trim()
         if (cleaned.isBlank()) return
         if (!isConfigured) {
-            onUnavailable(cleaned)
+            onUnavailable(cleaned, 0)
             return
         }
 
         stop()
 
         activeJob = scope.launch {
+            var handedOff = false
             try {
                 val chunks = cleaned.chunkForTts(MAX_CHARS_PER_REQUEST)
                 val chunkPlans = buildChunkPlans(chunks)
-
-                coroutineScope {
-                    // Launch every chunk synthesis up front; the semaphore bounds how many run at
-                    // once so later chunks are prefetched while earlier ones play.
-                    val pending = chunkPlans.map { plan ->
-                        async(Dispatchers.IO) { synthesisSemaphore.withPermit { synthesizeChunk(plan) } }
-                    }
-
-                    // Await each chunk in order and play it as soon as it is ready, so audio starts
-                    // after the first chunk instead of after the whole article is synthesized.
-                    for ((index, deferred) in pending.withIndex()) {
-                        val chunk = try {
-                            deferred.await()
-                        } catch (cancellation: CancellationException) {
-                            throw cancellation
-                        } catch (error: Throwable) {
-                            // Stop prefetching the rest and fall back to system TTS for only the
-                            // text that hasn't been spoken yet (avoids replaying earlier chunks).
-                            pending.drop(index + 1).forEach { it.cancel() }
-                            val remainingText = chunkPlans.drop(index).joinToString(" ") { it.text }
-                            Log.w(TAG, "Deepgram synthesis failed at chunk $index; falling back to system TTS", error)
-                            onUnavailable(remainingText)
-                            return@coroutineScope
-                        }
-                        playFile(chunk, chunkPlans[index], onWordIndex)
+                val failure = playChunks(chunkPlans, onWordIndex)
+                if (failure != null) {
+                    // Fall back to system TTS for only the text that hasn't been spoken yet
+                    // (avoids replaying earlier chunks).
+                    val remainingText = chunkPlans.drop(failure.chunkIndex).joinToString(" ") { it.text }
+                    Log.w(TAG, "Deepgram failed at chunk ${failure.chunkIndex}; falling back to system TTS", failure.error)
+                    if (remainingText.isNotBlank()) {
+                        handedOff = true
+                        onUnavailable(remainingText, chunkPlans[failure.chunkIndex].firstGlobalWordIndex)
                     }
                 }
             } finally {
-                onWordIndex(null)
-                onComplete()
+                // Only report completion for the playback that is still current. A job cancelled
+                // because a newer speak() replaced it must not reset the newer playback's state.
+                if (activeJob === coroutineContext[Job]) {
+                    activeJob = null
+                    if (!handedOff) {
+                        onWordIndex(null)
+                        onComplete()
+                    }
+                }
             }
         }
     }
+
+    /**
+     * Synthesizes and plays [chunkPlans] in order. Returns null when everything played, or the
+     * index of the first chunk that could not be synthesized or played.
+     *
+     * Uses [supervisorScope], not `coroutineScope`: with `coroutineScope`, one failed prefetch
+     * cancels the whole scope and rethrows its error even after `await()` caught it. That error
+     * then escaped [scope], which had no exception handler, and crashed the app.
+     */
+    private suspend fun playChunks(
+        chunkPlans: List<ChunkPlan>,
+        onWordIndex: (Int?) -> Unit
+    ): ChunkFailure? = supervisorScope {
+        // Launch every chunk synthesis up front; the semaphore bounds how many run at
+        // once so later chunks are prefetched while earlier ones play.
+        val pending = chunkPlans.map { plan ->
+            async(Dispatchers.IO) { synthesisSemaphore.withPermit { synthesizeChunk(plan) } }
+        }
+
+        // Await each chunk in order and play it as soon as it is ready, so audio starts
+        // after the first chunk instead of after the whole article is synthesized.
+        for ((index, deferred) in pending.withIndex()) {
+            try {
+                val chunk = deferred.await()
+                playFile(chunk, chunkPlans[index], onWordIndex)
+            } catch (cancellation: CancellationException) {
+                pending.forEach { it.cancel() }
+                throw cancellation
+            } catch (error: Throwable) {
+                pending.drop(index + 1).forEach { it.cancel() }
+                return@supervisorScope ChunkFailure(index, error)
+            }
+        }
+        null
+    }
+
+    private class ChunkFailure(val chunkIndex: Int, val error: Throwable)
 
     fun stop() {
         activeJob?.cancel()
@@ -201,7 +243,7 @@ class DeepgramTextToSpeech(
             return@withContext cacheFile
         }
 
-        retryWithBackoff { downloadMp3(chunk, cacheFile) }
+        retryWithBackoff(isRetryable = Throwable::isSafeToRetryBilledRequest) { downloadMp3(chunk, cacheFile) }
         cacheFile
     }
 
@@ -248,7 +290,7 @@ class DeepgramTextToSpeech(
     }
 
     private suspend fun fetchSttWordTimings(mp3File: File): List<SttWord> = withContext(Dispatchers.IO) {
-        retryWithBackoff { requestSttWordTimings(mp3File) }
+        retryWithBackoff(isRetryable = Throwable::isSafeToRetryBilledRequest) { requestSttWordTimings(mp3File) }
     }
 
     private fun requestSttWordTimings(mp3File: File): List<SttWord> {
@@ -527,12 +569,7 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
     for (sentence in sentences) {
         if (sentence.length > maxChars) {
             flush()
-            var index = 0
-            while (index < sentence.length) {
-                val end = minOf(index + maxChars, sentence.length)
-                chunks += sentence.substring(index, end)
-                index = end
-            }
+            chunks += sentence.splitAtWordsWithin(maxChars)
             continue
         }
 
@@ -547,6 +584,39 @@ internal fun String.chunkForTts(maxChars: Int): List<String> {
     flush()
 
     return chunks
+}
+
+/**
+ * Splits one over-long sentence into pieces of at most [maxChars], breaking only between words.
+ *
+ * Auto-generated YouTube captions have no punctuation, so the whole transcript reaches here as
+ * one "sentence". Cutting it every [maxChars] characters split words in half: the audio read
+ * half-words, and each cut added a word to the count, so the highlight drifted one word
+ * further behind the speech at every chunk. Only a single word longer than [maxChars], which
+ * real text does not contain, is still cut.
+ */
+private fun String.splitAtWordsWithin(maxChars: Int): List<String> {
+    val pieces = mutableListOf<String>()
+    val current = StringBuilder()
+    for (word in WORD_REGEX.findAll(this).map { it.value }) {
+        if (word.length > maxChars) {
+            if (current.isNotEmpty()) {
+                pieces += current.toString()
+                current.clear()
+            }
+            pieces += word.chunked(maxChars)
+            continue
+        }
+        val projected = current.length + (if (current.isNotEmpty()) 1 else 0) + word.length
+        if (projected > maxChars) {
+            pieces += current.toString()
+            current.clear()
+        }
+        if (current.isNotEmpty()) current.append(' ')
+        current.append(word)
+    }
+    if (current.isNotEmpty()) pieces += current.toString()
+    return pieces
 }
 
 /**

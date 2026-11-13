@@ -122,4 +122,23 @@ class ArticleFormatterTest {
         assertFalse(formatted.contains("Subscribe"))
         assertFalse(formatted.contains("Advertisement"))
     }
+
+    @Test
+    fun format_removesLongCallToActionAndPhotoCreditLines() {
+        // Lines from a real news page that the short-line rule alone let through.
+        val rawArticle = """
+            SEC directs GBA to use final SIR rolls for civic polls
+            A view of the Greater Bengaluru Authority office in Bengaluru. | Photo Credit: File photo
+            The State Election Commission has directed the authority to use the final rolls.
+            Sign up for free and get curated news updates
+            The exercise has to be completed by November 12, the letter stated.
+        """.trimIndent()
+
+        val formatted = ArticleFormatter.format(rawArticle)
+
+        assertTrue(formatted.contains("The State Election Commission has directed the authority"))
+        assertTrue(formatted.contains("The exercise has to be completed by November 12"))
+        assertFalse(formatted.contains("Sign up"))
+        assertFalse(formatted.contains("Photo Credit"))
+    }
 }

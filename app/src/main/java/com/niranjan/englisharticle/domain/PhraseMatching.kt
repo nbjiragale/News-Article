@@ -210,6 +210,8 @@ private fun wordsMatch(element: PatternWord.Word, actual: String): Boolean {
     val expected = element.word
     if (expected == actual) return true
     if (!element.allowInflection) return false
+    // Irregular forms first: "be" -> "is" are both short words and would fail the rule below.
+    if ((IRREGULAR_FORMS[expected] ?: expected) == (IRREGULAR_FORMS[actual] ?: actual)) return true
     // Short function words ("on", "in", "the") must match exactly, or "the" would match "then".
     if (expected.length < 3 && actual.length < 3) return false
     return sameLemma(expected, actual)

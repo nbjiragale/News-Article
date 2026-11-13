@@ -203,6 +203,8 @@ fun EnglishLearningApp(
                         },
                         onPauseListening = textToSpeech::pauseArticle,
                         onResumeListening = textToSpeech::resumeArticle,
+                        phraseStatus = uiState.phraseStatus,
+                        onRetryPhrases = viewModel::retryPhraseDetection,
                     )
                 }
             }

@@ -90,22 +90,28 @@ fun String.toWordTokens(): List<WordToken> {
     }.toList()
 }
 
+/**
+ * Groups a paragraph's tokens for display: each AI-detected phrase (and each built-in fixed
+ * expression) becomes one tappable group; every other word stays on its own.
+ *
+ * There used to be a guesser here that also grouped title-case pairs and finance word pairs
+ * ("Wall Street", "Prime Minister", "strong growth"). Those were styled exactly like real
+ * idioms, so the page filled with false "phrases" and the real ones did not stand out.
+ */
 fun List<WordToken>.toMeaningTokenGroups(priorityPhrases: List<String> = emptyList()): List<WordTokenGroup> {
-    val normalizedPriorityPhrases = priorityPhrases
+    val phrases = (priorityPhrases + KNOWN_FIXED_EXPRESSIONS)
         .map { it.toPhraseWords() }
         .filter { it.size >= 2 }
         .distinct()
         .sortedByDescending { it.size }
+    val normalizedTokens = map { it.text.normalizedPhraseWord() }
     val groups = mutableListOf<WordTokenGroup>()
     var index = 0
 
     while (index < size) {
-        val priorityPhraseSize = normalizedPriorityPhrases.firstOrNull { phraseWords ->
-            matchesPhrase(startIndex = index, phraseWords = phraseWords)
+        val phraseSize = phrases.firstOrNull { phraseWords ->
+            matchesPhrase(normalizedTokens, startIndex = index, phraseWords = phraseWords)
         }?.size
-        val phraseSize = priorityPhraseSize ?: (3 downTo 2).firstOrNull { wordCount ->
-            canCreatePhrase(startIndex = index, wordCount = wordCount)
-        }
 
         if (phraseSize == null) {
             groups += WordTokenGroup(tokens = listOf(this[index]), isPhrase = false)
@@ -230,224 +236,49 @@ fun String.isLikelyHeading(paragraphIndex: Int): Boolean {
     return paragraphIndex == 0 || words.size <= 12
 }
 
-private fun List<WordToken>.canCreatePhrase(startIndex: Int, wordCount: Int): Boolean {
-    if (startIndex + wordCount > size) return false
-    return subList(startIndex, startIndex + wordCount).isLikelyMeaningPhrase()
-}
-
-private fun List<WordToken>.matchesPhrase(startIndex: Int, phraseWords: List<String>): Boolean {
+/**
+ * True when [phraseWords] match the tokens starting at [startIndex], compared with the same
+ * normalization the phrase resolver uses (case, curly quotes, edge punctuation), and no word
+ * before the last ends a sentence.
+ */
+private fun List<WordToken>.matchesPhrase(
+    normalizedTokens: List<String>,
+    startIndex: Int,
+    phraseWords: List<String>
+): Boolean {
     if (startIndex + phraseWords.size > size) return false
     if (subList(startIndex, startIndex + phraseWords.size - 1).any { it.endsPhraseBoundary() }) {
         return false
     }
-
-    val tokenWords = subList(startIndex, startIndex + phraseWords.size)
-        .map { it.cleanWord().toPhraseWord() }
-    return tokenWords == phraseWords
-}
-
-private fun List<WordToken>.isLikelyMeaningPhrase(): Boolean {
-    val words = map { it.cleanWord() }
-    if (words.size !in 2..3) return false
-    if (words.any { it.isBlank() || it.length < 2 || it.any { char -> char.isDigit() } }) return false
-    if (dropLast(1).any { it.endsPhraseBoundary() }) return false
-
-    val lowerWords = words.map { it.lowercase() }
-    val normalized = lowerWords.joinToString(" ")
-    if (normalized in knownPhrases) return true
-
-    if (lowerWords.any { it in phraseStopWords }) return false
-    if (all { it.isTitleLike() }) return true
-
-    return when (words.size) {
-        2 -> lowerWords[0].isPhraseModifier() && lowerWords[1].isPhraseHead()
-        3 -> {
-            val prefix = lowerWords.dropLast(1)
-            val last = lowerWords.last()
-            last.isPhraseHead() && prefix.all { it.isPhraseModifier() }
-        }
-        else -> false
-    }
+    return phraseWords.indices.all { offset -> normalizedTokens[startIndex + offset] == phraseWords[offset] }
 }
 
 private fun WordToken.endsPhraseBoundary(): Boolean {
-    return text.lastOrNull() in setOf('.', '!', '?', ':', ';')
-}
-
-private fun WordToken.isTitleLike(): Boolean {
-    val word = cleanWord()
-    return word.length > 1 && word.first().isUpperCase()
-}
-
-private fun String.isPhraseModifier(): Boolean {
-    return this in phraseModifiers ||
-        endsWith("al") ||
-        endsWith("ic") ||
-        endsWith("ive") ||
-        endsWith("ous") ||
-        endsWith("ary") ||
-        endsWith("ent") ||
-        endsWith("ant") ||
-        endsWith("ed") ||
-        endsWith("ing") ||
-        endsWith("ful") ||
-        endsWith("less") ||
-        endsWith("able") ||
-        endsWith("ible")
-}
-
-private fun String.isPhraseHead(): Boolean {
-    return this in phraseHeads || (length > 4 && endsWith("s"))
+    return text.trimEnd('"', '\'', ')', '\u201D', '\u2019').lastOrNull() in setOf('.', '!', '?', ':', ';')
 }
 
 private fun String.toPhraseWords(): List<String> {
-    return Regex("[A-Za-z0-9']+")
-        .findAll(this)
-        .map { it.value.toPhraseWord() }
-        .filter { it.isNotBlank() }
-        .toList()
+    return split(Regex("\\s+"))
+        .map { it.normalizedPhraseWord() }
+        .filter { it.isNotEmpty() }
 }
 
-private fun String.toPhraseWord(): String {
-    return lowercase().trim('\'')
-}
-
-private val knownPhrases = setOf(
+/**
+ * Fixed expressions common in news that are highlighted even when the AI misses them or
+ * fails. Only multi-word expressions whose meaning a learner cannot get word by word.
+ */
+private val KNOWN_FIXED_EXPRESSIONS = listOf(
+    "according to",
     "as a result",
-    "as well",
-    "backed by",
+    "as well as",
     "because of",
-    "carry through",
-    "driven by",
     "due to",
     "even though",
-    "in order",
+    "in order to",
+    "in spite of",
     "instead of",
-    "point to",
-    "points to",
+    "on the other hand",
     "rather than",
     "so far",
     "such as"
-)
-
-private val phraseStopWords = setOf(
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "been",
-    "but",
-    "by",
-    "for",
-    "from",
-    "has",
-    "have",
-    "he",
-    "her",
-    "his",
-    "in",
-    "is",
-    "it",
-    "its",
-    "of",
-    "on",
-    "or",
-    "she",
-    "that",
-    "the",
-    "their",
-    "they",
-    "this",
-    "to",
-    "was",
-    "we",
-    "were",
-    "who",
-    "will",
-    "with"
-)
-
-private val phraseModifiers = setOf(
-    "asian",
-    "central",
-    "chief",
-    "downward",
-    "economic",
-    "equity",
-    "european",
-    "financial",
-    "global",
-    "growth",
-    "institutional",
-    "major",
-    "market",
-    "minor",
-    "new",
-    "overall",
-    "positive",
-    "primary",
-    "public",
-    "renewed",
-    "similar",
-    "strong",
-    "tech",
-    "technology",
-    "upward",
-    "wall",
-    "street"
-)
-
-private val phraseHeads = setOf(
-    "article",
-    "business",
-    "case",
-    "catalyst",
-    "company",
-    "confidence",
-    "conglomerate",
-    "conglomerates",
-    "correction",
-    "data",
-    "deal",
-    "economies",
-    "economy",
-    "estimate",
-    "estimates",
-    "government",
-    "growth",
-    "industry",
-    "indices",
-    "inflation",
-    "investor",
-    "investors",
-    "lead",
-    "market",
-    "markets",
-    "momentum",
-    "news",
-    "performance",
-    "plan",
-    "policy",
-    "portfolio",
-    "quarter",
-    "rally",
-    "rate",
-    "rates",
-    "recovery",
-    "report",
-    "sector",
-    "session",
-    "share",
-    "shares",
-    "stock",
-    "stocks",
-    "technology",
-    "tensions",
-    "trajectory",
-    "trend",
-    "trends",
-    "volatility"
 )

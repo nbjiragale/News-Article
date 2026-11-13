@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -27,6 +28,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -67,6 +69,7 @@ import com.niranjan.englisharticle.ui.components.ArticleHeader
 import com.niranjan.englisharticle.ui.components.ArticleListenButton
 import com.niranjan.englisharticle.ui.components.ArticleSummaryCard
 import com.niranjan.englisharticle.ui.components.AppTopBar
+import com.niranjan.englisharticle.ui.PhraseDetectionStatus
 import com.niranjan.englisharticle.ui.state.SelectedWord
 import com.niranjan.englisharticle.ui.theme.ArticleBodyTextStyle
 import com.niranjan.englisharticle.ui.tts.ArticlePlaybackState
@@ -89,6 +92,8 @@ fun ArticleViewerScreen(
     onStartListening: (text: String, wordOffset: Int) -> Unit,
     onPauseListening: () -> Unit,
     onResumeListening: () -> Unit,
+    phraseStatus: PhraseDetectionStatus = PhraseDetectionStatus.Idle,
+    onRetryPhrases: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Tokenizing/grouping a long article is non-trivial; run it off the main thread so opening the
@@ -244,6 +249,11 @@ fun ArticleViewerScreen(
                         if (showGestureTip) {
                             GestureTip(onDismiss = ::dismissGestureTip)
                         }
+                        PhraseStatusRow(
+                            status = phraseStatus,
+                            phraseCount = article.idiomaticPhrases.size,
+                            onRetry = onRetryPhrases
+                        )
                         ArticleSummaryCard(
                             summary = article.summary,
                             isLoading = isSummarizing,
@@ -352,6 +362,64 @@ private fun HighlightToggleButton(
 private const val HIGHLIGHT_PREFS_NAME = "article_viewer_prefs"
 private const val HIGHLIGHT_PREF_KEY = "highlight_word_enabled"
 private const val GESTURE_TIP_DISMISSED_KEY = "gesture_tip_dismissed"
+
+/**
+ * Says whether idiom/phrase detection is running, how many it found, or that it failed.
+ * Detection used to run silently, so "no highlights yet", "none found" and "it failed" all
+ * looked the same, and a failure could not be retried.
+ */
+@Composable
+private fun PhraseStatusRow(
+    status: PhraseDetectionStatus,
+    phraseCount: Int,
+    onRetry: () -> Unit
+) {
+    val message = when (status) {
+        PhraseDetectionStatus.Idle -> return
+        PhraseDetectionStatus.Finding -> "Finding idioms and phrases…"
+        PhraseDetectionStatus.Done -> when (phraseCount) {
+            0 -> "No idioms or phrases found in this article."
+            1 -> "1 idiom or phrase is underlined. Tap it to learn it."
+            else -> "$phraseCount idioms and phrases are underlined. Tap one to learn it."
+        }
+        PhraseDetectionStatus.Failed -> "Couldn't check this article for idioms and phrases."
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (status == PhraseDetectionStatus.Finding) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        } else {
+            Text(
+                text = "Aa",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.tertiary,
+                textDecoration = TextDecoration.Underline
+            )
+        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (status == PhraseDetectionStatus.Failed) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.weight(1f)
+        )
+        if (status == PhraseDetectionStatus.Failed) {
+            TextButton(onClick = onRetry) {
+                Text("Try again", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
 
 @Composable
 private fun GestureTip(onDismiss: () -> Unit) {

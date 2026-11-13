@@ -18,6 +18,7 @@ import com.niranjan.englisharticle.ui.state.SelectedWord
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,8 +43,12 @@ data class EnglishLearningUiState(
     val isImportingYouTube: Boolean = false,
     val youTubeError: String? = null,
     val selected: SelectedWord? = null,
-    val meaningState: MeaningUiState = MeaningUiState.Idle
+    val meaningState: MeaningUiState = MeaningUiState.Idle,
+    /** Progress of idiom/phrase detection for [cleanedArticle]. */
+    val phraseStatus: PhraseDetectionStatus = PhraseDetectionStatus.Idle
 )
+
+enum class PhraseDetectionStatus { Idle, Finding, Done, Failed }
 
 sealed interface EnglishNavigationEvent {
     data object OpenReader : EnglishNavigationEvent
@@ -83,6 +88,9 @@ class EnglishLearningViewModel(
     private var summaryJob: Job? = null
     private var youTubeImportJob: Job? = null
 
+    /** Articles (title + body) whose phrase detection is running, to avoid duplicate requests. */
+    private val activePhraseDetections = mutableSetOf<String>()
+
     fun updateDraftArticle(article: String) {
         _uiState.update {
             it.copy(
@@ -106,7 +114,8 @@ class EnglishLearningViewModel(
         _uiState.update {
             it.copy(
                 cleanedArticle = null,
-                summaryError = null
+                summaryError = null,
+                phraseStatus = PhraseDetectionStatus.Idle
             )
         }
     }
@@ -205,6 +214,7 @@ class EnglishLearningViewModel(
             _uiState.update {
                 it.copy(
                     cleanedArticle = resolved,
+                    phraseStatus = PhraseDetectionStatus.Idle,
                     isImportingYouTube = false,
                     youTubeError = null,
                     summaryError = null,
@@ -267,21 +277,70 @@ class EnglishLearningViewModel(
      */
     private suspend fun saveAndExtractPhrases(article: CleanArticleResult) {
         runDatabaseWrite("save recent article") { localStore.saveRecentArticle(article) }
+        detectPhrases(article)
+    }
+
+    /** Runs phrase detection again for the article on screen after it failed. */
+    fun retryPhraseDetection() {
+        val article = uiState.value.cleanedArticle ?: return
+        if (uiState.value.phraseStatus == PhraseDetectionStatus.Finding) return
+        detectPhrases(article)
+    }
+
+    /**
+     * Detects idioms and phrases for [article] in a job of its own, so leaving the reader does
+     * not cancel it, and saves them to history. Failures used to be swallowed into an empty
+     * list with no retry and nothing on screen; now there is one automatic retry and the
+     * reader shows the status, with a manual retry when it fails.
+     */
+    private fun detectPhrases(article: CleanArticleResult) {
+        val key = article.title + "\u0000" + article.cleanArticle
+        if (!activePhraseDetections.add(key)) return
+        setPhraseStatusIfShown(article, PhraseDetectionStatus.Finding)
 
         viewModelScope.launch {
-            val detectedPhrases = try {
-                articleService.extractIdiomaticPhrases(article.cleanArticle)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                emptyList()
-            }
-            if (detectedPhrases.isEmpty()) return@launch
+            try {
+                val detectedPhrases = try {
+                    extractPhrasesWithRetry(article.cleanArticle)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    Log.w(TAG, "Phrase detection failed", error)
+                    setPhraseStatusIfShown(article, PhraseDetectionStatus.Failed)
+                    return@launch
+                }
 
-            val articleToSave = enrichShownArticle(article) { shown ->
-                shown.copy(idiomaticPhrases = detectedPhrases)
+                val articleToSave = enrichShownArticle(article) { shown ->
+                    shown.copy(idiomaticPhrases = detectedPhrases)
+                }
+                setPhraseStatusIfShown(article, PhraseDetectionStatus.Done)
+                if (detectedPhrases.isNotEmpty()) {
+                    runDatabaseWrite("save recent article") { localStore.saveRecentArticle(articleToSave) }
+                }
+            } finally {
+                activePhraseDetections.remove(key)
             }
-            runDatabaseWrite("save recent article") { localStore.saveRecentArticle(articleToSave) }
+        }
+    }
+
+    private suspend fun extractPhrasesWithRetry(text: String): List<String> {
+        return try {
+            articleService.extractIdiomaticPhrases(text)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            delay(PHRASE_RETRY_DELAY_MS)
+            articleService.extractIdiomaticPhrases(text)
+        }
+    }
+
+    private fun setPhraseStatusIfShown(article: CleanArticleResult, status: PhraseDetectionStatus) {
+        _uiState.update { state ->
+            if (state.cleanedArticle?.isSameArticleAs(article) == true) {
+                state.copy(phraseStatus = status)
+            } else {
+                state
+            }
         }
     }
 
@@ -297,12 +356,21 @@ class EnglishLearningViewModel(
 
     fun openRecentArticle(article: RecentArticle) {
         stopArticleWork()
+        val opened = article.toCleanArticleResult()
         _uiState.update {
             it.copy(
-                cleanedArticle = article.toCleanArticleResult(),
-                summaryError = null
+                cleanedArticle = opened,
+                summaryError = null,
+                phraseStatus = if (opened.idiomaticPhrases.isEmpty()) {
+                    PhraseDetectionStatus.Idle
+                } else {
+                    PhraseDetectionStatus.Done
+                }
             )
         }
+        // Articles saved before detection worked (or whose detection failed) have no phrases;
+        // look for them now rather than leaving the article without highlights for good.
+        if (opened.idiomaticPhrases.isEmpty()) detectPhrases(opened)
     }
 
     fun requestArticleContext() {
@@ -579,6 +647,7 @@ class EnglishLearningViewModel(
             _uiState.update {
                 it.copy(
                     cleanedArticle = displayResult,
+                    phraseStatus = PhraseDetectionStatus.Idle,
                     isCleaningArticle = false,
                     summaryError = null
                 )
@@ -611,6 +680,8 @@ class EnglishLearningViewModel(
 private const val MAX_ARTICLE_CHARS = 100_000
 
 private const val TAG = "EnglishLearningVM"
+
+private const val PHRASE_RETRY_DELAY_MS = 2_000L
 
 /**
  * Longest transcript sent to the AI formatter. The formatter echoes the whole text back, so a

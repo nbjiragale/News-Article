@@ -35,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.BuildConfig
+import com.niranjan.englisharticle.data.ApiProxy
 import com.niranjan.englisharticle.data.ArticleLocalStore
 import com.niranjan.englisharticle.data.OpenRouterArticleService
 import com.niranjan.englisharticle.data.local.EnglishArticleDatabase
@@ -295,10 +296,10 @@ fun EnglishLearningApp(
 
 @Composable
 private fun rememberDefaultArticleService(): ArticleAiService {
-    return remember {
+    val context = LocalContext.current
+    return remember(context) {
         OpenRouterArticleService(
-            apiKey = BuildConfig.OPENROUTER_API_KEY,
-            model = BuildConfig.OPENROUTER_MODEL
+            proxy = ApiProxy.fromBuildConfig(context)
         )
     }
 }

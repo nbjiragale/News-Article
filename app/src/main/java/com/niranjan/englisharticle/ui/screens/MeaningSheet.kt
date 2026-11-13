@@ -123,9 +123,9 @@ fun MeaningSheet(
                         modifier = Modifier.padding(14.dp)
                     )
                 }
-                if (BuildConfig.OPENROUTER_API_KEY.isBlank()) {
+                if (BuildConfig.API_BASE_URL.isBlank()) {
                     Text(
-                        text = "Add openrouter.api.key=YOUR_API_KEY to local.properties and rebuild the app.",
+                        text = "Add api.base.url=https://YOUR-SERVER to local.properties and rebuild the app.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

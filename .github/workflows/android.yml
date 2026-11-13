@@ -25,8 +25,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # The build reads API keys from local.properties. CI has none and must not
-      # have any: the keys are only needed at runtime, and an empty value still
+      # The build reads the API server address and app token from local.properties.
+      # CI has neither: they are only needed at runtime, and an empty value still
       # produces a valid BuildConfig field, so compilation is unaffected.
       - name: Create empty local.properties
         run: touch local.properties
@@ -74,3 +74,18 @@ jobs:
             app/build/outputs/logs/
           if-no-files-found: ignore
           retention-days: 7
+
+  server:
+    name: API server tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Server unit tests
+        working-directory: server
+        run: npm test

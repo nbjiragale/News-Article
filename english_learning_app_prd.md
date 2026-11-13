@@ -153,13 +153,12 @@ Return JSON:
 
 ## 🔐 API Key Handling
 
-- Store in `local.properties`
-- Do NOT hardcode in code
-- Keys used:
-  - `openrouter.api.key` — OpenRouter (article cleaning, summary, word meaning)
-  - `openrouter.model` — optional override; defaults to `google/gemini-2.5-flash`
-  - `deepgram.api.key` — Deepgram Aura TTS for high-quality English article narration. Without this key the app silently falls back to the on-device Android TTS.
-  - `deepgram.voice` — optional voice override; defaults to `aura-asteria-en`
+- The OpenRouter and Deepgram keys live only on the app's API server (`server/`, a
+  Cloudflare Worker), as Worker secrets. The model is chosen there too.
+- The app calls that server. `local.properties` holds only:
+  - `api.base.url` — the server's address
+  - `api.app.token` — must match the server's `APP_TOKEN` secret (ships in the APK; rotatable, not a money secret)
+  - `deepgram.enabled`, `deepgram.voice`, `deepgram.audio.offset.ms`, `deepgram.word.timings` — read-aloud options
 
 ---
 

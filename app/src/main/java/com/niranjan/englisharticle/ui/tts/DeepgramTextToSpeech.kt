@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaPlayer
 import android.util.Log
 import com.niranjan.englisharticle.BuildConfig
+import com.niranjan.englisharticle.data.ApiProxy
 import com.niranjan.englisharticle.data.RetryableHttpException
 import com.niranjan.englisharticle.data.isSafeToRetryBilledRequest
 import com.niranjan.englisharticle.data.retryWithBackoff
@@ -32,7 +33,10 @@ import java.security.MessageDigest
 
 class DeepgramTextToSpeech(
     context: Context,
-    private val apiKey: String,
+    /** The app's own server, which holds the Deepgram key. */
+    private val proxy: ApiProxy,
+    /** False to skip Deepgram and always use the phone's voice. */
+    private val enabled: Boolean = true,
     private val voice: String,
     private val audioOffsetMs: Int = 0,
     /**
@@ -67,7 +71,7 @@ class DeepgramTextToSpeech(
     }
 
     val isConfigured: Boolean
-        get() = apiKey.isNotBlank()
+        get() = enabled && proxy.isConfigured
 
     val isPaused: Boolean
         get() = paused && player != null
@@ -264,7 +268,7 @@ class DeepgramTextToSpeech(
             doOutput = true
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Authorization", "Token $apiKey")
+            proxy.applyHeaders(this)
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "audio/mpeg")
         }
@@ -307,7 +311,7 @@ class DeepgramTextToSpeech(
             doOutput = true
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Authorization", "Token $apiKey")
+            proxy.applyHeaders(this)
             setRequestProperty("Content-Type", "audio/mpeg")
             setFixedLengthStreamingMode(mp3File.length())
         }
@@ -463,11 +467,10 @@ class DeepgramTextToSpeech(
         if (BuildConfig.DEBUG) Log.i(TAG, message)
     }
 
-    private fun deepgramSpeakUrl(): String =
-        "https://api.deepgram.com/v1/speak?model=$voice&encoding=mp3"
+    // The app's server adds the Deepgram key; see ApiProxy.
+    private fun deepgramSpeakUrl(): String = proxy.url("/v1/speak?voice=$voice")
 
-    private fun deepgramListenUrl(): String =
-        "https://api.deepgram.com/v1/listen?model=$STT_MODEL&punctuate=true&smart_format=false&filler_words=false"
+    private fun deepgramListenUrl(): String = proxy.url("/v1/listen")
 
     private class DeepgramException(message: String) : RuntimeException(message)
 
@@ -478,7 +481,6 @@ class DeepgramTextToSpeech(
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 60_000
         private const val WORD_TICK_MS = 40L
-        private const val STT_MODEL = "nova-3"
         private const val MAX_CONCURRENT_SYNTHESIS = 3
         private const val MAX_CACHE_BYTES = 200L * 1024 * 1024
 

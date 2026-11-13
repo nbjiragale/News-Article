@@ -18,14 +18,16 @@ class ArticleSpeaker(
     context: Context,
     deepgramApiKey: String = BuildConfig.DEEPGRAM_API_KEY,
     deepgramVoice: String = BuildConfig.DEEPGRAM_VOICE,
-    deepgramAudioOffsetMs: Int = BuildConfig.DEEPGRAM_AUDIO_OFFSET_MS
+    deepgramAudioOffsetMs: Int = BuildConfig.DEEPGRAM_AUDIO_OFFSET_MS,
+    deepgramWordTimings: Boolean = BuildConfig.DEEPGRAM_WORD_TIMINGS
 ) {
     private val systemTts = ArticleTextToSpeech(context)
     private val deepgram = DeepgramTextToSpeech(
         context = context,
         apiKey = deepgramApiKey,
         voice = deepgramVoice,
-        audioOffsetMs = deepgramAudioOffsetMs
+        audioOffsetMs = deepgramAudioOffsetMs,
+        useSttWordTimings = deepgramWordTimings
     )
 
     /** Which engine is reading the article right now, so pause/resume reach the right one. */

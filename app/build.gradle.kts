@@ -66,6 +66,14 @@ android {
             "DEEPGRAM_AUDIO_OFFSET_MS",
             (localProperties.getProperty("deepgram.audio.offset.ms") ?: "0")
         )
+        // Exact word-highlight timings cost a second paid Deepgram call (speech-to-text on the
+        // generated audio) for every audio chunk. Off by default: the highlight then uses
+        // estimated timings. Set deepgram.word.timings=true to pay for exact ones.
+        buildConfigField(
+            "boolean",
+            "DEEPGRAM_WORD_TIMINGS",
+            (localProperties.getProperty("deepgram.word.timings")?.trim()?.toBoolean() ?: false).toString()
+        )
     }
 
     signingConfigs {

@@ -51,6 +51,7 @@ fun SavedWordsScreen(
     onBack: () -> Unit,
     onPractice: () -> Unit,
     onDeleteWord: (SavedWord) -> Unit,
+    showBack: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     // Deleting a saved word also erases its practice history, so it is confirmed first.
@@ -90,7 +91,7 @@ fun SavedWordsScreen(
             .background(MaterialTheme.colorScheme.surface)
     ) {
         AppTopBar(
-            showBack = true,
+            showBack = showBack,
             onBack = onBack,
             onPracticeClick = if (savedWords.isNotEmpty()) onPractice else null
         )

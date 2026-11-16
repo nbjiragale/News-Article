@@ -42,30 +42,88 @@ fun ArticleSummaryCard(
     onSpeakKannada: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasSummary = summary != null && summary.isNotBlank()
+
+    if (!hasSummary && !isLoading) {
+        CompactOffer(
+            errorMessage = errorMessage,
+            onRequestContext = onRequestContext,
+            modifier = modifier
+        )
+        return
+    }
+
     Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             SummaryHeader()
 
-            when {
-                summary != null && summary.isNotBlank() -> SummaryContent(
-                    summary = summary,
+            if (hasSummary) {
+                SummaryContent(
+                    summary = summary!!,
                     onSpeakEnglish = onSpeakEnglish,
                     onSpeakKannada = onSpeakKannada
                 )
-                isLoading -> LoadingPlaceholder()
-                else -> CallToAction(
-                    errorMessage = errorMessage,
-                    onRequestContext = onRequestContext
+            } else {
+                LoadingPlaceholder()
+            }
+        }
+    }
+}
+
+/**
+ * The offer, before it has been taken up: one row the width of the text, so the article
+ * below it stays the first thing on the page.
+ */
+@Composable
+private fun CompactOffer(
+    errorMessage: String?,
+    onRequestContext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Surface(
+            onClick = onRequestContext,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_book_a),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = if (errorMessage.isNullOrBlank()) {
+                        "Summarise this in English and Kannada"
+                    } else {
+                        "Try the summary again"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
+        }
+        if (!errorMessage.isNullOrBlank()) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
@@ -80,14 +138,14 @@ private fun SummaryHeader() {
             modifier = Modifier
                 .size(34.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiaryContainer),
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_book_a),
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -113,7 +171,7 @@ private fun SummaryContent(
     onSpeakKannada: (String) -> Unit
 ) {
     SummarySection(
-        label = "WHAT HAPPENED",
+        label = "What happened",
         english = summary.whatHappenedEnglish,
         kannada = summary.whatHappenedKannada,
         onSpeakEnglish = onSpeakEnglish,
@@ -124,7 +182,7 @@ private fun SummaryContent(
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         )
         SummarySection(
-            label = "WHAT THIS ARTICLE IS ABOUT",
+            label = "What this is about",
             english = summary.gistEnglish,
             kannada = summary.gistKannada,
             onSpeakEnglish = onSpeakEnglish,
@@ -146,7 +204,7 @@ private fun SummarySection(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.tertiary
+            color = MaterialTheme.colorScheme.primary
         )
         if (english.isNotBlank()) {
             SummaryLine(
@@ -200,48 +258,7 @@ private fun SummaryLine(
                 painter = painterResource(R.drawable.ic_volume_2),
                 contentDescription = "Read aloud",
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.tertiary
-            )
-        }
-    }
-}
-
-@Composable
-private fun CallToAction(
-    errorMessage: String?,
-    onRequestContext: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = "Tap to generate a short two-line summary in simple English and Kannada.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (!errorMessage.isNullOrBlank()) {
-            Text(
-                text = errorMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-        Button(
-            onClick = onRequestContext,
-            shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = MaterialTheme.colorScheme.onTertiary
-            )
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_book_a),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                text = if (errorMessage.isNullOrBlank()) "Get article context" else "Try again",
-                modifier = Modifier.padding(start = 8.dp),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -256,7 +273,7 @@ private fun LoadingPlaceholder() {
         CircularProgressIndicator(
             modifier = Modifier.size(20.dp),
             strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.tertiary
+            color = MaterialTheme.colorScheme.primary
         )
         Text(
             text = "Generating summary…",

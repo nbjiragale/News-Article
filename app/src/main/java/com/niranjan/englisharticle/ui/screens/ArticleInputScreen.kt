@@ -1,10 +1,10 @@
 package com.niranjan.englisharticle.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,15 +22,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +51,17 @@ import androidx.compose.ui.unit.dp
 import com.niranjan.englisharticle.R
 import com.niranjan.englisharticle.ui.components.AppTopBar
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Home — the page you land on.
+ *
+ * Two things happen here and they are not equal: most visits continue the article you
+ * were already reading, and some start a new one. So continuing comes first and is the
+ * only object on the page; starting something new is the plain working area below it.
+ *
+ * The old layout led with a disabled grey "Open article" slab that could not be pressed
+ * until you had pasted something. Nothing here is shown disabled — the primary button is
+ * whatever you can actually do right now.
+ */
 @Composable
 fun ArticleInputScreen(
     article: String,
@@ -65,8 +72,8 @@ fun ArticleInputScreen(
     onRetry: () -> Unit,
     onClearArticle: () -> Unit,
     onOpenRecents: () -> Unit,
-    onOpenSavedWords: () -> Unit,
-    onOpenPractice: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onOpenSavedWords: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onOpenPractice: () -> Unit = {},
     latestArticleTitle: String? = null,
     onContinueReading: () -> Unit = {},
     youTubeUrl: String = "",
@@ -77,8 +84,12 @@ fun ArticleInputScreen(
     onDismissYouTubeError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // 0 = Paste article  |  1 = YouTube
+    // 0 = Paste text  |  1 = YouTube
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+
+    // Once there is something to open, the page stops selling the idea and gets out of
+    // the way: the standfirst goes, so the article and its button fit on one screen.
+    val isComposing = article.isNotBlank() || isCleaning
 
     Column(
         modifier = modifier
@@ -91,174 +102,188 @@ fun ArticleInputScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(horizontal = 22.dp)
         ) {
-            // ── Hero heading ────────────────────────────────────
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Spacer(Modifier.height(28.dp))
+
+            // ── Masthead ───────────────────────────────────────
+            // The second line is in Kannada because the promise is bilingual, and
+            // saying it in one script only would make that an afterthought.
+            Text(
+                text = "Read English.",
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Understand in ಕನ್ನಡ.",
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!isComposing) {
+                Spacer(Modifier.height(14.dp))
                 Text(
-                    text = "Read English,\nLearn in Kannada.",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Paste an article or a YouTube link. Tap any word for meaning, definition, and an example you can save.",
+                    text = "Tap any word for its meaning, a definition, and an example you can keep.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // ── Input card (segmented: Paste / YouTube) ─────────
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // Segmented control
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2),
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                activeContentColor   = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            icon = {}
-                        ) {
-                            // Icon + label must share a Row: the SegmentedButton label slot
-                            // places all of its children at the same offset.
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_newspaper),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    "Paste article",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        SegmentedButton(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2),
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                activeContentColor   = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            icon = {}
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_play),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    "YouTube",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
+            Spacer(Modifier.height(if (isComposing) 24.dp else 32.dp))
 
-                    // Tab content
-                    if (selectedTab == 0) {
-                        PasteTabContent(
-                            article = article,
-                            onArticleChange = onArticleChange,
-                            isCleaning = isCleaning,
-                            onLoadArticle = onLoadArticle,
-                            onClearArticle = onClearArticle,
-                            cleaningError = cleaningError,
-                            onRetry = onRetry
-                        )
-                    } else {
-                        YouTubeTabContent(
-                            url = youTubeUrl,
-                            onUrlChange = onYouTubeUrlChange,
-                            onImport = onImportYouTube,
-                            isImporting = isImportingYouTube,
-                            error = youTubeError,
-                            onDismissError = onDismissYouTubeError
-                        )
-                    }
-                }
-            }
-
-            // ── Continue reading ────────────────────────────────
-            // Opens the last article directly. It used to open the history list, even
-            // when that list was empty; the list is now the history icon in the top bar.
             if (latestArticleTitle != null) {
-                Surface(
-                    onClick = onContinueReading,
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_history),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = "Continue reading",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = latestArticleTitle.ifBlank { "Untitled article" },
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_right),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+                ContinueReadingBlock(
+                    title = latestArticleTitle.ifBlank { "Untitled article" },
+                    onClick = onContinueReading
+                )
+                Spacer(Modifier.height(32.dp))
             }
+
+            // ── Start something new ────────────────────────────
+            RuledLabel(text = "Start something new")
+            Spacer(Modifier.height(14.dp))
+
+            SourceTabs(selected = selectedTab, onSelect = { selectedTab = it })
+            Spacer(Modifier.height(16.dp))
+
+            if (selectedTab == 0) {
+                PasteTabContent(
+                    article = article,
+                    onArticleChange = onArticleChange,
+                    isCleaning = isCleaning,
+                    onLoadArticle = onLoadArticle,
+                    onClearArticle = onClearArticle,
+                    cleaningError = cleaningError,
+                    onRetry = onRetry
+                )
+            } else {
+                YouTubeTabContent(
+                    url = youTubeUrl,
+                    onUrlChange = onYouTubeUrlChange,
+                    onImport = onImportYouTube,
+                    isImporting = isImportingYouTube,
+                    error = youTubeError,
+                    onDismissError = onDismissYouTubeError
+                )
+            }
+
+            Spacer(Modifier.height(40.dp))
         }
+    }
+}
+
+/**
+ * The last article, offered as one object. This is the likeliest reason the app was
+ * opened, so it sits above everything else and is the only thing on the page with a
+ * surface of its own.
+ */
+@Composable
+private fun ContinueReadingBlock(
+    title: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 18.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Continue reading",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_right),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/** A label with a rule running out from it, so it sits on the page instead of floating alone. */
+@Composable
+private fun RuledLabel(text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(12.dp))
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+    }
+}
+
+/**
+ * Source picker: two words with a rule under the live one. A tab drawn as a tab, rather
+ * than two pill buttons competing with the real action below them.
+ */
+@Composable
+private fun SourceTabs(
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        SourceTab("Paste text", selected == 0) { onSelect(0) }
+        SourceTab("YouTube", selected == 1) { onSelect(1) }
+    }
+}
+
+@Composable
+private fun SourceTab(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        TextButton(
+            onClick = onClick,
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        Box(
+            modifier = Modifier
+                .height(2.dp)
+                .width(if (isSelected) 26.dp else 0.dp)
+                .background(
+                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                )
+        )
     }
 }
 
@@ -274,157 +299,93 @@ private fun PasteTabContent(
 ) {
     val clipboard = LocalClipboardManager.current
     var clipboardEmpty by remember { mutableStateOf(false) }
+    val hasText = article.isNotBlank()
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Word count chip
-        if (article.isNotBlank()) {
-            val wordCount = article.trim().split(Regex("\\s+")).size
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            ) {
-                Text(
-                    text = "$wordCount words",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-        }
-
+    Column {
+        // The writing surface is recessed into the page rather than raised off it:
+        // text goes in here, it is not a card sitting on top.
         OutlinedTextField(
             value = article,
             onValueChange = onArticleChange,
+            // Empty, this is a prompt and should take a prompt's worth of room; the
+            // old full-height box was a grey void that dominated the page before you
+            // had done anything. It grows as the article goes in.
             modifier = Modifier
-                .heightIn(min = 180.dp, max = 320.dp)
+                .heightIn(min = if (hasText) 210.dp else 116.dp, max = 260.dp)
                 .fillMaxWidth(),
             placeholder = {
                 Text(
-                    "Paste a full article — headlines, body, the works.",
+                    "Paste a full article — headline, body, the works.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
-            shape = RoundedCornerShape(16.dp),
-            minLines = 8,
-            maxLines = 14,
+            shape = RoundedCornerShape(12.dp),
+            minLines = if (hasText) 7 else 3,
+            maxLines = 11,
             textStyle = MaterialTheme.typography.bodyMedium,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor   = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                focusedLabelColor    = MaterialTheme.colorScheme.primary,
-                cursorColor          = MaterialTheme.colorScheme.primary,
-                focusedContainerColor   = MaterialTheme.colorScheme.surfaceContainerLowest,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer
             )
         )
 
-        // Pasting into a large empty field needs a long-press and a menu; most people
-        // arrive here with an article already copied, so offer it as one tap.
-        if (article.isBlank() && !isCleaning) {
-            FilledTonalButton(
-                onClick = {
-                    val copied = clipboard.getText()?.text.orEmpty()
-                    clipboardEmpty = copied.isBlank()
-                    if (copied.isNotBlank()) onArticleChange(copied)
-                },
+        Spacer(Modifier.height(8.dp))
+
+        if (hasText) {
+            val wordCount = article.trim().split(Regex("\\s+")).size
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(26.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_newspaper),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.size(8.dp))
-                Text("Paste from clipboard", style = MaterialTheme.typography.labelLarge)
-            }
-            if (clipboardEmpty) {
                 Text(
-                    text = "Your clipboard is empty. Copy an article in your browser first.",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = if (wordCount == 1) "1 word" else "$wordCount words",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onClearArticle, enabled = !isCleaning) {
+                    Text("Clear", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
 
         if (cleaningError != null) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = cleaningError,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = onRetry) {
-                        Text("Retry", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
+            Spacer(Modifier.height(6.dp))
+            ErrorNote(message = cleaningError, actionLabel = "Try again", onAction = onRetry)
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(
-                onClick = onLoadArticle,
-                enabled = article.isNotBlank() && !isCleaning,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp),
-                shape = RoundedCornerShape(26.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor   = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                if (isCleaning) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                        Text("Preparing…", style = MaterialTheme.typography.labelLarge)
-                    }
-                } else {
-                    Text(
-                        "Open article",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
+        Spacer(Modifier.height(14.dp))
 
-            if (article.isNotBlank() && !isCleaning) {
-                Surface(
-                    onClick = onClearArticle,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(52.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_circle_x),
-                            contentDescription = "Clear",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+        // The primary action is whatever can be done now, so the page never shows a dead
+        // grey button waiting for input.
+        if (hasText || isCleaning) {
+            PrimaryAction(
+                label = if (isCleaning) "Preparing the article" else "Open article",
+                busy = isCleaning,
+                onClick = onLoadArticle
+            )
+        } else {
+            PrimaryAction(
+                label = "Paste from clipboard",
+                busy = false,
+                iconRes = R.drawable.ic_newspaper,
+                onClick = {
+                    val copied = clipboard.getText()?.text.orEmpty()
+                    clipboardEmpty = copied.isBlank()
+                    if (copied.isNotBlank()) onArticleChange(copied)
                 }
+            )
+            if (clipboardEmpty) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "Nothing is copied yet. Copy an article in your browser, then come back.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -439,106 +400,134 @@ private fun YouTubeTabContent(
     error: String?,
     onDismissError: () -> Unit
 ) {
-    val clipboard = LocalClipboardManager.current
+    val canImport = url.isNotBlank() && !isImporting
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "Paste a YouTube link to read the video's captions as an article.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
+    Column {
         OutlinedTextField(
             value = url,
-            onValueChange = onUrlChange,
+            onValueChange = {
+                onUrlChange(it)
+                if (error != null) onDismissError()
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("https://www.youtube.com/watch?v=…") },
-            trailingIcon = if (url.isBlank()) {
-                {
-                    TextButton(
-                        onClick = {
-                            clipboard.getText()?.text?.trim()?.takeIf { it.isNotEmpty() }
-                                ?.let(onUrlChange)
-                        }
-                    ) {
-                        Text("Paste", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            } else {
-                null
+            placeholder = {
+                Text(
+                    "youtube.com/watch?v=…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             },
-            keyboardActions = KeyboardActions(onGo = { if (url.isNotBlank() && !isImporting) onImport() }),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
+            textStyle = MaterialTheme.typography.bodyMedium,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Go
             ),
+            keyboardActions = KeyboardActions(onGo = { if (canImport) onImport() }),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor   = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                focusedLabelColor    = MaterialTheme.colorScheme.primary,
-                cursorColor          = MaterialTheme.colorScheme.primary,
-                focusedContainerColor   = MaterialTheme.colorScheme.surfaceContainerLowest,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer
             )
         )
 
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "The video's transcript becomes the article. A video with no captions can't be imported.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         if (error != null) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = onDismissError) {
-                        Text("Dismiss", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
+            Spacer(Modifier.height(12.dp))
+            ErrorNote(message = error, actionLabel = "Dismiss", onAction = onDismissError)
         }
 
-        Button(
-            onClick = onImport,
-            enabled = url.isNotBlank() && !isImporting,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(26.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor   = MaterialTheme.colorScheme.onPrimary
+        if (canImport || isImporting) {
+            Spacer(Modifier.height(16.dp))
+            PrimaryAction(
+                label = if (isImporting) "Fetching the transcript" else "Import transcript",
+                busy = isImporting,
+                onClick = onImport
             )
-        ) {
-            if (isImporting) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                    Text("Getting transcript…", style = MaterialTheme.typography.labelLarge)
-                }
-            } else {
-                Text(
-                    "Get transcript",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+        }
+    }
+}
+
+@Composable
+private fun PrimaryAction(
+    label: String,
+    busy: Boolean,
+    onClick: () -> Unit,
+    iconRes: Int? = null
+) {
+    Button(
+        onClick = onClick,
+        enabled = !busy,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.primary,
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary
+        )
+    ) {
+        if (busy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                strokeWidth = 2.dp
+            )
+            Spacer(Modifier.width(10.dp))
+        } else if (iconRes != null) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(label, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
+ * A failure says what happened and what to do about it. The container carries the error
+ * colour; the message itself stays readable ink rather than shouting in red.
+ */
+@Composable
+private fun ErrorNote(
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(8.dp))
+        TextButton(onClick = onAction) {
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }

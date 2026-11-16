@@ -4,152 +4,88 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.niranjan.englisharticle.R
 
-// ── Font families ──────────────────────────────────────────────
+// ── Two voices ─────────────────────────────────────────────────
+// Content is serif; chrome is sans. An article title belongs to the article, so it
+// is set in the same face as the prose underneath it. Buttons, labels and bars are
+// the app talking, and they stay in the sans.
+//
+// Only Normal and Bold are declared for the sans: those are the two cuts actually
+// bundled in res/font. Asking for Medium or SemiBold would silently snap to one of
+// them anyway, so the scale earns its hierarchy from size and spacing instead.
 
-// Chrome / UI font — uses Atkinson Hyperlegible (already in res/font/).
-// Swap out for HankenGrotesk if you add those TTF assets to res/font/.
+/** Chrome. Atkinson Hyperlegible — drawn for low-vision readers, unusually legible small. */
 val AppFontFamily = FontFamily(
     Font(R.font.atkinson_hyperlegible_regular, FontWeight.Normal),
-    Font(R.font.atkinson_hyperlegible_bold,    FontWeight.Bold),
+    Font(R.font.atkinson_hyperlegible_bold, FontWeight.Bold),
 )
 
-// Article body — serif gives the editorial reading feel.
-// Replace with a Newsreader FontFamily if you add those assets.
+/** Content. The platform serif — the reading voice, and the voice of article titles. */
 val ArticleReadingFontFamily = FontFamily.Serif
 
 /**
- * Article body text. Larger than bodyLarge (16sp): this is long-form reading by language
- * learners, who also tap individual words, so both legibility and tap size matter. 18sp with
- * a 1.67 line height matches common reading-app defaults.
+ * Article prose. Long-form reading on a phone, by learners who also tap individual
+ * words, so the line is generous and the words are large enough to hit accurately.
  */
 val ArticleBodyTextStyle = TextStyle(
     fontFamily = ArticleReadingFontFamily,
     fontWeight = FontWeight.Normal,
-    fontSize = 18.sp,
-    lineHeight = 30.sp,
+    fontSize = 19.sp,
+    lineHeight = 32.sp,
     letterSpacing = 0.sp
 )
 
-// ── Typography scale ───────────────────────────────────────────
+private fun content(
+    size: Int,
+    line: Int,
+    weight: FontWeight = FontWeight.Bold,
+    tracking: Double = 0.0
+) = TextStyle(
+    fontFamily = ArticleReadingFontFamily,
+    fontWeight = weight,
+    fontSize = size.sp,
+    lineHeight = line.sp,
+    letterSpacing = tracking.sp
+)
+
+private fun chrome(
+    size: Int,
+    line: Int,
+    weight: FontWeight = FontWeight.Normal,
+    tracking: Double = 0.0
+) = TextStyle(
+    fontFamily = AppFontFamily,
+    fontWeight = weight,
+    fontSize = size.sp,
+    lineHeight = line.sp,
+    letterSpacing = tracking.sp
+)
 
 val AppTypography = Typography(
-    // Large display — used in screen headings (Recents, Saved Words header)
-    displayLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 57.sp,
-        lineHeight = 64.sp,
-        letterSpacing = (-0.25).sp
-    ),
-    displayMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 45.sp,
-        lineHeight = 52.sp,
-        letterSpacing = 0.sp
-    ),
-    displaySmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 36.sp,
-        lineHeight = 44.sp,
-        letterSpacing = (-0.2).sp
-    ),
+    // ── Content voice (serif) ──────────────────────────────────
+    displayLarge  = content(40, 46, tracking = -0.6),
+    displayMedium = content(33, 40, tracking = -0.4),
+    displaySmall  = content(27, 34, tracking = -0.2),
 
-    // Headline — article titles, word header in MeaningSheet
-    headlineLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.15).sp
-    ),
-    headlineMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
-        lineHeight = 36.sp,
-        letterSpacing = (-0.1).sp
-    ),
-    headlineSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        lineHeight = 32.sp,
-        letterSpacing = 0.sp
-    ),
+    // Article titles. headlineMedium is the fallback for long headlines.
+    headlineLarge  = content(30, 38, tracking = -0.3),
+    headlineMedium = content(25, 32, tracking = -0.2),
+    headlineSmall  = content(21, 28, tracking = -0.1),
 
-    // Title — card headings, top app bar
-    titleLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = (-0.05).sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.1.sp
-    ),
-    titleSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp
-    ),
+    // ── Chrome voice (sans) ────────────────────────────────────
+    titleLarge  = chrome(19, 25, FontWeight.Bold),
+    titleMedium = chrome(16, 22, FontWeight.Bold),
+    titleSmall  = chrome(14, 20, FontWeight.Bold),
 
-    // Body — article paragraphs use ArticleReadingFontFamily override at call site
-    bodyLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 27.sp,    // generous line height for readability
-        letterSpacing = 0.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.25.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
-        letterSpacing = 0.4.sp
-    ),
+    bodyLarge  = chrome(16, 26),
+    bodyMedium = chrome(15, 23),
+    bodySmall  = chrome(13, 19),
 
-    // Label — chips, badges, nav labels
-    labelLarge = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp
-    ),
-    labelMedium = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    ),
+    // Sentence case throughout — no tracked-out capitals.
+    labelLarge  = chrome(14, 18, FontWeight.Bold, 0.1),
+    labelMedium = chrome(13, 17, FontWeight.Normal, 0.15),
+    labelSmall  = chrome(11, 15, FontWeight.Normal, 0.25),
 )

@@ -394,13 +394,13 @@ private fun PhraseStatusRow(
             CircularProgressIndicator(
                 modifier = Modifier.size(16.dp),
                 strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.tertiary
+                color = MaterialTheme.colorScheme.primary
             )
         } else {
             Text(
                 text = "Aa",
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline
             )
         }
@@ -490,14 +490,14 @@ private fun InteractiveParagraph(
         if (relative < 0) return@remember -1
         groupTokenRanges.indexOfFirst { range -> relative in range }
     }
-    val highlightBackground = MaterialTheme.colorScheme.primaryContainer
-    val highlightForeground = MaterialTheme.colorScheme.onPrimaryContainer
+    val highlightBackground = MaterialTheme.colorScheme.secondaryContainer
+    val highlightForeground = MaterialTheme.colorScheme.onSecondaryContainer
     val renderContent = buildParagraphRenderContent(
         tokenGroups = tokenGroups,
         lookedUpWords = lookedUpWords,
         normalColor = MaterialTheme.colorScheme.onSurface,
-        lookedUpColor = MaterialTheme.colorScheme.primary,
-        phraseColor = MaterialTheme.colorScheme.tertiary,
+        lookedUpColor = MaterialTheme.colorScheme.tertiary,
+        phraseColor = MaterialTheme.colorScheme.primary,
         highlightedGroupIndex = highlightedGroupIndex,
         highlightBackground = highlightBackground,
         highlightForeground = highlightForeground

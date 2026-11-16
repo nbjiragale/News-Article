@@ -133,6 +133,14 @@ fun EnglishLearningApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Saved and Practice are tabs, and a tab does not need a back arrow to its sibling
+    // tab — the tab bar already does that. They are also reachable from the reader, and
+    // from there back is real, so the arrow follows where you actually came from.
+    val cameFromOutsideTabs = navController.previousBackStackEntry
+        ?.destination
+        ?.route
+        ?.let { it !in BottomNavRoutes } == true
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         bottomBar = {
@@ -230,7 +238,8 @@ fun EnglishLearningApp(
                     onPractice = { navController.navigateSingleTop(AppRoute.Practice) },
                     onDeleteWord = { savedWord ->
                         viewModel.deleteSavedWord(savedWord.savedKey)
-                    }
+                    },
+                    showBack = cameFromOutsideTabs
                 )
             }
             composable(AppRoute.Practice) {
@@ -240,7 +249,8 @@ fun EnglishLearningApp(
                     onOpenSavedWords = { navController.navigateSingleTop(AppRoute.SavedWords) },
                     onPracticeAnswer = { savedWord, isCorrect ->
                         viewModel.recordPracticeResult(savedWord.savedKey, isCorrect)
-                    }
+                    },
+                    showBack = cameFromOutsideTabs
                 )
             }
         }

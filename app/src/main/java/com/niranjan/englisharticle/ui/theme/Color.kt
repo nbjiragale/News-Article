@@ -2,82 +2,82 @@ package com.niranjan.englisharticle.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── ArthaReader Design System ──────────────────────────────────
-// Emerald accent (#0f7b5a) on crisp white surfaces.
-// Designed to match the ArthaReader Claude Design handoff.
+// ── ArthaReader — "Rubric" ─────────────────────────────────────
+// The app is named for artha (ಅರ್ಥ, "meaning"), and what it does — explaining a
+// text in the margin — is the old manuscript practice of rubrication: the body
+// in ink, the gloss in red.
+//
+// So red is a rule here, not a decoration:
+//   Rubric  — appears ONLY where meaning appears (a looked-up word, an open gloss).
+//   Indigo  — structure and action, and idiomatic phrases, so a phrase reads
+//             differently from a single word.
+// Everything else is ink on paper. Nothing else gets a hue.
 
-// Emerald scale — primary brand colour
-val Emerald900 = Color(0xFF0A3D2E)
-val Emerald800 = Color(0xFF0A5A40)
-val Emerald700 = Color(0xFF0F7B5A)   // primary
-val Emerald600 = Color(0xFF178C68)
-val Emerald400 = Color(0xFF3DAF8A)
-val Emerald200 = Color(0xFFAADEC9)
-val Emerald100 = Color(0xFFCDEBDD)
-val Emerald50  = Color(0xFFEEF5F1)
+// ── Ink (text) ─────────────────────────────────────────────────
+// A real colour rather than a tinted black: deep indigo, the colour of iron-gall ink.
+val Ink        = Color(0xFF1C2230)
+val InkMuted   = Color(0xFF5B6475)
+val InkFaint   = Color(0xFF8A91A0)
 
-// Neutral scale (warm stone undertone to complement emerald)
-val Stone950 = Color(0xFF111614)
-val Stone900 = Color(0xFF16201B)
-val Stone700 = Color(0xFF2F352F)
-val Stone600 = Color(0xFF3B423C)
-val Stone500 = Color(0xFF4A534D)
-val Stone400 = Color(0xFF646A63)
-val Stone300 = Color(0xFF7C837B)
-val Stone200 = Color(0xFFAEB3AD)
-val Stone100 = Color(0xFFDFE5DE)
-val Stone50  = Color(0xFFF3F5F3)
+// ── Paper (surfaces) ───────────────────────────────────────────
+// Cool near-white, not parchment cream. Recessed tiers are where text goes IN
+// (the paste area, the summary) rather than where cards sit on top.
+val Paper           = Color(0xFFF7F7F4)
+val PaperRaised     = Color(0xFFFFFFFF)
+val PaperRecess     = Color(0xFFEDEDE8)
+val PaperRecessHigh = Color(0xFFE4E4DE)
 
-// Surface hierarchy
-val SurfaceWhite           = Color(0xFFFFFFFF)
-val SurfaceContainerLowest = Color(0xFFFFFFFF)
-val SurfaceContainerLow    = Color(0xFFF3F5F3)
-val SurfaceContainer       = Color(0xFFEEF0EE)
-val SurfaceContainerHigh   = Color(0xFFE8EBE8)
+// ── Rules ──────────────────────────────────────────────────────
+val Rule       = Color(0xFFDCDCD5)
+val RuleStrong = Color(0xFFC3C3BA)
 
-// Secondary container — soft emerald tint for cards/chips
-val SecondaryContainer    = Color(0xFFDFEAE4)
-val OnSecondaryContainer  = Color(0xFF2D4038)
+// ── Rubric (meaning) ───────────────────────────────────────────
+val Rubric        = Color(0xFFA4161A)
+val RubricTint    = Color(0xFFF7E4E2)
+val OnRubricTint  = Color(0xFF6E0D10)
 
-// Tertiary — plum for idiomatic phrase highlights
-val Plum700 = Color(0xFF7C5A88)
-val Plum200 = Color(0xFFD9B8E8)
-val Plum100 = Color(0xFFEDD9F4)
-val Plum50  = Color(0xFFF7EEF9)
+// ── Indigo (structure, action, idiomatic phrases) ──────────────
+val Indigo        = Color(0xFF2B3A67)
+val IndigoTint    = Color(0xFFE2E6F1)
+val OnIndigoTint  = Color(0xFF1A2444)
 
-// Separator / outline
-val OutlineVariant = Color(0xFFDCEAE3)
-val Outline        = Color(0xFFB8C4BC)
+// ── Success (a correct practice answer) ────────────────────────
+val SuccessLight            = Color(0xFF2F6B4F)
+val SuccessContainerLight   = Color(0xFFDCEDE3)
+val OnSuccessContainerLight = Color(0xFF16402D)
 
-// Error
-val ErrorRed        = Color(0xFFB04A3F)
-val ErrorContainer  = Color(0xFFFBDEDA)
-val OnError         = Color(0xFFFFFFFF)
-val OnErrorContainer = Color(0xFF5C0B0B)
+// ── Error ──────────────────────────────────────────────────────
+// Darker and browner than Rubric so a failure never reads as a gloss.
+val ErrorInk         = Color(0xFF7E1416)
+val ErrorTint        = Color(0xFFF3DEDC)
+val OnErrorTint      = Color(0xFF4A0A0C)
 
-// Scrim / overlay
-val Scrim = Color(0xFF14201B)
+val Scrim = Color(0xFF11141C)
 
-// Success — correct practice answers. Darker than the brand emerald so the text passes
-// contrast on its own container.
-val SuccessLight            = Color(0xFF17694D)
-val SuccessContainerLight   = Color(0xFFD3F1E2)
-val OnSuccessContainerLight = Color(0xFF0A3D2E)
+// ── Dark ───────────────────────────────────────────────────────
+// Night reading: the paper darkens, the ink lightens, the rules stay quiet.
+val InkSurface      = Color(0xFF15171E)
+val InkSurfaceLow   = Color(0xFF101219)
+val InkSurfaceRaise = Color(0xFF1C1F28)
+val InkSurfaceHigh  = Color(0xFF252935)
+val InkSurfaceTop   = Color(0xFF2F3440)
 
-// Dark surface tiers (emerald-tinted near-blacks). The dark scheme used to leave these
-// unset, so Material filled them with its default purple-grey baseline.
-val DarkSurface                = Color(0xFF101513)
-val DarkSurfaceContainerLowest = Color(0xFF0B0F0D)
-val DarkSurfaceContainerLow    = Color(0xFF171D1A)
-val DarkSurfaceContainer       = Color(0xFF1B221F)
-val DarkSurfaceContainerHigh   = Color(0xFF252D29)
-val DarkSurfaceContainerHighest = Color(0xFF303834)
+val PaperOnDark   = Color(0xFFE9E8E2)
+val InkMutedDark  = Color(0xFFA0A6B4)
+val RuleDark      = Color(0xFF2E3340)
 
-val ErrorDark            = Color(0xFFFFB4A9)
-val OnErrorDark          = Color(0xFF5F150D)
-val ErrorContainerDark   = Color(0xFF7D2B22)
-val OnErrorContainerDark = Color(0xFFFFDAD4)
+val RubricDark       = Color(0xFFEB7A6E)
+val RubricTintDark   = Color(0xFF4C1512)
+val OnRubricTintDark = Color(0xFFFFDAD4)
 
-val SuccessDark            = Color(0xFF8FDCB9)
-val SuccessContainerDark   = Color(0xFF0F4A36)
-val OnSuccessContainerDark = Color(0xFFCDEBDD)
+val IndigoDark       = Color(0xFF93A7D9)
+val IndigoTintDark   = Color(0xFF243154)
+val OnIndigoTintDark = Color(0xFFD7E0F4)
+
+val SuccessDark            = Color(0xFF7FC9A4)
+val SuccessContainerDark   = Color(0xFF1B4634)
+val OnSuccessContainerDark = Color(0xFFCDE9DA)
+
+val ErrorInkDark    = Color(0xFFFFB4A9)
+val ErrorTintDark   = Color(0xFF5F1A17)
+val OnErrorTintDark = Color(0xFFFFDAD4)

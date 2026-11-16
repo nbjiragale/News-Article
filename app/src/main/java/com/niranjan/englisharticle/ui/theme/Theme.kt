@@ -10,107 +10,105 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
+// Role mapping, so the rule in Color.kt survives contact with Material:
+//
+//   primary   → Indigo.  Actions, navigation, and idiomatic phrases.
+//   tertiary  → Rubric.  Meaning, and nothing else. A looked-up word turns red;
+//                        the gloss that opens for it is red. Buttons never are.
+//   secondary → ink-on-recessed-paper. Quiet chips that should not compete.
+//
+// Every role is set explicitly. Any role left out falls back to Material's
+// purple-grey baseline, which is how the dark scheme used to go wrong.
+
 private val LightColorScheme = lightColorScheme(
-    // ── Primary (emerald) ──────────────────────────────────────
-    primary                = Emerald700,
-    onPrimary              = SurfaceWhite,
-    primaryContainer       = Emerald50,
-    onPrimaryContainer     = Emerald800,
+    primary                 = Indigo,
+    onPrimary               = PaperRaised,
+    primaryContainer        = IndigoTint,
+    onPrimaryContainer      = OnIndigoTint,
 
-    // ── Secondary (soft emerald tint — cards, chips, toggles) ─
-    secondary              = Emerald600,
-    onSecondary            = SurfaceWhite,
-    secondaryContainer     = SecondaryContainer,
-    onSecondaryContainer   = OnSecondaryContainer,
+    secondary               = InkMuted,
+    onSecondary             = PaperRaised,
+    secondaryContainer      = PaperRecess,
+    onSecondaryContainer    = Ink,
 
-    // ── Tertiary (plum — idiomatic phrase highlights) ──────────
-    tertiary               = Plum700,
-    onTertiary             = SurfaceWhite,
-    tertiaryContainer      = Plum100,
-    onTertiaryContainer    = Plum700,
+    tertiary                = Rubric,
+    onTertiary              = PaperRaised,
+    tertiaryContainer       = RubricTint,
+    onTertiaryContainer     = OnRubricTint,
 
-    // ── Background / Surface ───────────────────────────────────
-    background             = SurfaceWhite,
-    onBackground           = Stone900,
-    surface                = SurfaceWhite,
-    onSurface              = Stone900,
-    surfaceVariant         = SurfaceContainerLow,
-    onSurfaceVariant       = Stone400,
+    background              = Paper,
+    onBackground            = Ink,
+    surface                 = Paper,
+    onSurface               = Ink,
+    surfaceVariant          = PaperRecess,
+    onSurfaceVariant        = InkMuted,
 
-    // ── Surface container tiers ────────────────────────────────
-    surfaceContainerLowest = SurfaceContainerLowest,
-    surfaceContainerLow    = SurfaceContainerLow,
-    surfaceContainer       = SurfaceContainer,
-    surfaceContainerHigh   = SurfaceContainerHigh,
-    surfaceContainerHighest = Stone100,
+    surfaceContainerLowest  = PaperRaised,
+    surfaceContainerLow     = Paper,
+    surfaceContainer        = PaperRecess,
+    surfaceContainerHigh    = PaperRecessHigh,
+    surfaceContainerHighest = Color(0xFFDBDBD4),
 
-    // ── Inverse ───────────────────────────────────────────────
-    inverseSurface         = Stone900,
-    inverseOnSurface       = Stone50,
-    inversePrimary         = Emerald200,
+    inverseSurface          = Ink,
+    inverseOnSurface        = Paper,
+    inversePrimary          = IndigoDark,
 
-    // ── Outline ───────────────────────────────────────────────
-    outline                = Outline,
-    outlineVariant         = OutlineVariant,
+    outline                 = RuleStrong,
+    outlineVariant          = Rule,
 
-    // ── Error ─────────────────────────────────────────────────
-    error                  = ErrorRed,
-    onError                = OnError,
-    errorContainer         = ErrorContainer,
-    onErrorContainer       = OnErrorContainer,
+    error                   = ErrorInk,
+    onError                 = PaperRaised,
+    errorContainer          = ErrorTint,
+    onErrorContainer        = OnErrorTint,
 
-    // ── Scrim ─────────────────────────────────────────────────
-    scrim                  = Scrim,
+    scrim                   = Scrim,
 )
 
-// Dark scheme: the same emerald logic on emerald-tinted near-black surfaces. Every role is
-// set explicitly; any role left out falls back to Material's purple-grey baseline, which is
-// what the app used to show in dark mode.
 private val DarkColorScheme = darkColorScheme(
-    primary                = Emerald400,
-    onPrimary              = Emerald900,
-    primaryContainer       = Emerald800,
-    onPrimaryContainer     = Emerald50,
+    primary                 = IndigoDark,
+    onPrimary               = Color(0xFF14203F),
+    primaryContainer        = IndigoTintDark,
+    onPrimaryContainer      = OnIndigoTintDark,
 
-    secondary              = Emerald200,
-    onSecondary            = Emerald900,
-    secondaryContainer     = Color(0xFF233A30),
-    onSecondaryContainer   = Emerald100,
+    secondary               = InkMutedDark,
+    onSecondary             = InkSurfaceLow,
+    secondaryContainer      = InkSurfaceHigh,
+    onSecondaryContainer    = PaperOnDark,
 
-    tertiary               = Plum200,
-    onTertiary             = Stone950,
-    tertiaryContainer      = Color(0xFF4E3858),
-    onTertiaryContainer    = Plum100,
+    tertiary                = RubricDark,
+    onTertiary              = Color(0xFF3B0D0A),
+    tertiaryContainer       = RubricTintDark,
+    onTertiaryContainer     = OnRubricTintDark,
 
-    background             = DarkSurface,
-    onBackground           = Stone50,
-    surface                = DarkSurface,
-    onSurface              = Stone50,
-    surfaceVariant         = DarkSurfaceContainerHigh,
-    onSurfaceVariant       = Stone200,
+    background              = InkSurface,
+    onBackground            = PaperOnDark,
+    surface                 = InkSurface,
+    onSurface               = PaperOnDark,
+    surfaceVariant          = InkSurfaceHigh,
+    onSurfaceVariant        = InkMutedDark,
 
-    surfaceContainerLowest = DarkSurfaceContainerLowest,
-    surfaceContainerLow    = DarkSurfaceContainerLow,
-    surfaceContainer       = DarkSurfaceContainer,
-    surfaceContainerHigh   = DarkSurfaceContainerHigh,
-    surfaceContainerHighest = DarkSurfaceContainerHighest,
+    surfaceContainerLowest  = InkSurfaceLow,
+    surfaceContainerLow     = InkSurfaceRaise,
+    surfaceContainer        = InkSurfaceHigh,
+    surfaceContainerHigh    = InkSurfaceTop,
+    surfaceContainerHighest = Color(0xFF3A4150),
 
-    inverseSurface         = Stone50,
-    inverseOnSurface       = Stone900,
-    inversePrimary         = Emerald700,
+    inverseSurface          = PaperOnDark,
+    inverseOnSurface        = InkSurface,
+    inversePrimary          = Indigo,
 
-    outline                = Stone400,
-    outlineVariant         = Color(0xFF2E3833),
+    outline                 = Color(0xFF5B6273),
+    outlineVariant          = RuleDark,
 
-    error                  = ErrorDark,
-    onError                = OnErrorDark,
-    errorContainer         = ErrorContainerDark,
-    onErrorContainer       = OnErrorContainerDark,
+    error                   = ErrorInkDark,
+    onError                 = Color(0xFF4A0A0C),
+    errorContainer          = ErrorTintDark,
+    onErrorContainer        = OnErrorTintDark,
 
-    scrim                  = Color.Black,
+    scrim                   = Color.Black,
 )
 
-/** Colors Material's scheme has no role for. Read them through [AppTheme.extendedColors]. */
+/** Colours Material has no role for. Read them through [AppTheme.extendedColors]. */
 @Immutable
 data class ExtendedColors(
     val success: Color,
@@ -148,9 +146,9 @@ fun EnglishArticleTheme(
     CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography   = AppTypography,
-            shapes       = AppShapes,
-            content      = content
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content
         )
     }
 }

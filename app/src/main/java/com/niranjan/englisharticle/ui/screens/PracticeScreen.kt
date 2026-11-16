@@ -51,6 +51,7 @@ fun PracticeScreen(
     onBack: () -> Unit,
     onOpenSavedWords: () -> Unit,
     onPracticeAnswer: (SavedWord, Boolean) -> Unit,
+    showBack: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var deck by remember { mutableStateOf<List<SavedWord>>(emptyList()) }
@@ -84,7 +85,7 @@ fun PracticeScreen(
             .background(MaterialTheme.colorScheme.surface)
     ) {
         AppTopBar(
-            showBack = true,
+            showBack = showBack,
             onBack = onBack,
             onSavedWordsClick = onOpenSavedWords
         )
@@ -217,8 +218,8 @@ private fun PracticeHeader(
             )
             Pill(
                 text = "$sessionCorrect / $sessionAnswered correct",
-                container = MaterialTheme.colorScheme.tertiaryContainer,
-                content = MaterialTheme.colorScheme.onTertiaryContainer
+                container = MaterialTheme.colorScheme.primaryContainer,
+                content = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
         LinearProgressIndicator(
@@ -246,7 +247,7 @@ private fun PromptCard(savedWord: SavedWord) {
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
-                text = "CHOOSE THE KANNADA MEANING",
+                text = "Choose the Kannada meaning",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
@@ -418,8 +419,8 @@ private fun EmptyPracticeState(
             iconRes = R.drawable.ic_school,
             title = "No practice deck yet",
             body = "Save a few words or phrases from an article and they'll appear here as flashcards.",
-            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-            iconTint = MaterialTheme.colorScheme.onTertiaryContainer
+            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+            iconTint = MaterialTheme.colorScheme.onPrimaryContainer
         )
     }
 }
@@ -450,8 +451,8 @@ private fun PracticeCompleteState(
                 ) {
                     Pill(
                         text = "Session complete",
-                        container = MaterialTheme.colorScheme.tertiaryContainer,
-                        content = MaterialTheme.colorScheme.onTertiaryContainer
+                        container = MaterialTheme.colorScheme.primaryContainer,
+                        content = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
                         text = "$percent%",

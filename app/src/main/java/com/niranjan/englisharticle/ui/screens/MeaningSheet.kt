@@ -255,7 +255,7 @@ private fun MeaningSheetHeader(
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 ) {
                     Text(
-                        text = partOfSpeech.uppercase(),
+                        text = partOfSpeech,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold
@@ -340,7 +340,7 @@ private fun MeaningInfoCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = label.uppercase(),
+                    text = label,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -377,7 +377,7 @@ private fun MeaningContextCard(
 ) {
     val englishContext = if (showSentence && sentence.isNotBlank()) sentence else result.exampleEnglish
     val kannadaContext = result.exampleKannada.ifBlank { result.explanationKannada }
-    val sectionTitle = if (showSentence) "SENTENCE TRANSLATION" else "EXAMPLE IN CONTEXT"
+    val sectionTitle = if (showSentence) "Sentence translation" else "Example in context"
 
     if (englishContext.isBlank() && kannadaContext.isBlank()) return
 
